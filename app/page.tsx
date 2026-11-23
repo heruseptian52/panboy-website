@@ -1,4 +1,7 @@
-import { events, rupiah } from "@/lib/events";
+import { events, rupiah, getEventStatus, getRegistrationHref } from "@/lib/events";
+
+// Refresh static event statuses periodically, so passed events automatically close.
+export const revalidate = 3600;
 
 export default function Home(){
   const featured = events.filter(e=>e.category==="Event Panboy" || e.category==="Event Premium");
@@ -18,6 +21,7 @@ export default function Home(){
 }
 
 function EventCard({e}:{e:(typeof events)[number]}){
-  const wa = e.adminWa ? `https://wa.me/${e.adminWa}?text=${encodeURIComponent("Halo admin, saya mau daftar "+e.name)}` : "#";
-  return <article className="card"><div className="poster">POSTER EVENT</div><div className="meta"><h3>{e.name}</h3><div className="chips"><span className={`chip ${e.mode.toLowerCase()}`}>{e.mode}</span><span className="chip">{e.category}</span><span className="chip">{e.status}</span></div><div className="details"><div>Prizepool: <b>{rupiah(e.prizepool)}</b></div>{e.fee>0&&<div>Fee: <b>{rupiah(e.fee)}</b></div>}<div>Periode: {e.period}</div>{e.city&&<div>Kota: {e.city}</div>}</div><div style={{marginTop:14}}><a className="cta" href={wa} target="_blank">REGIST</a></div></div></article>
+  const status = getEventStatus(e);
+  const registrationHref = getRegistrationHref(e);
+  return <article className="card"><div className="poster">POSTER EVENT</div><div className="meta"><h3>{e.name}</h3><div className="chips"><span className={`chip ${e.mode.toLowerCase()}`}>{e.mode}</span><span className="chip">{e.category}</span><span className="chip">{status}</span></div><div className="details"><div>Prizepool: <b>{rupiah(e.prizepool)}</b></div>{e.fee>0&&<div>Fee: <b>{rupiah(e.fee)}</b></div>}<div>Periode: {e.period}</div>{e.city&&<div>Kota: {e.city}</div>}</div><div style={{marginTop:14}}>{registrationHref ? <a className="cta" href={registrationHref} target="_blank" rel="noopener noreferrer">REGIST</a> : <span className="cta cta-disabled" aria-disabled="true">{status === "Close" ? "PENDAFTARAN DITUTUP" : "LINK PENDAFTARAN BELUM TERSEDIA"}</span>}</div></div></article>
 }
