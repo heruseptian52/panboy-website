@@ -23,7 +23,7 @@ test('hanya kirim data baru yang menandai auto WhatsApp setelah respons sukses',
   assert.match(success,/new URLSearchParams\(location\.search\)\.get\("wa"\)!=="1"/);
   assert.match(success,/whatsappOpened\.current=true/);
   assert.match(success,/current\.searchParams\.delete\("wa"\)/);
-  assert.match(success,/location\.assign\(teamWhatsAppUrl\(saved\.teamName\)\)/);
+  assert.match(success,/location\.assign\(saved\.groupUrl \|\| teamWhatsAppUrl\(saved\.teamName\)\)/);
 });
 test('link grup dan link edit pribadi tetap tersedia di halaman konfirmasi',()=>{
   assert.match(success,/href=\{saved\.groupUrl\}/);

@@ -25,7 +25,7 @@ export default function Success(){
     const current=new URL(location.href);
     current.searchParams.delete("wa");
     history.replaceState(history.state,"",current.href);
-    location.assign(teamWhatsAppUrl(saved.teamName));
+    location.assign(saved.groupUrl || teamWhatsAppUrl(saved.teamName));
   },[saved]);
   const summary=saved ? [
     saved.title,"Team: "+saved.teamName,
@@ -41,9 +41,9 @@ export default function Success(){
   return <main className="roster-page"><header><a href="/">← BERANDA</a><strong>PANBOY COMMUNITY</strong><a href="/data-event">FORM DATA</a></header>
     <section className="roster-panel roster-success"><h1>{saved?"Data team berhasil disimpan":error||"Memuat data team…"}</h1>
     {saved&&<><p><strong>{saved.teamName}</strong> · {saved.title}</p>
-    {saved.groupUrl?<><p>WhatsApp terbuka dengan nama team siap kirim. Pilih grup event dan tekan kirim. Jika belum bergabung, buka link grup di bawah.</p>
-    <a className="primary success-cta" href={saved.groupUrl} target="_blank" rel="noopener noreferrer">GABUNG GRUP WHATSAPP ↗</a>
-    <a className="primary success-cta" href={teamWhatsAppUrl(saved.teamName)} target="_blank" rel="noopener noreferrer">BUKA WHATSAPP DENGAN NAMA TEAM ↗</a></>:
+    {saved.groupUrl?<><p>Grup WhatsApp event terbuka otomatis. Link undangan grup tidak dapat mengisi pesan secara langsung; untuk mengirim nama team, gunakan tombol di bawah lalu pilih grup event dan tekan Kirim.</p>
+    <a className="primary success-cta" href={saved.groupUrl} target="_blank" rel="noopener noreferrer">BUKA GRUP EVENT ↗</a>
+    <a className="primary success-cta" href={teamWhatsAppUrl(saved.teamName)} target="_blank" rel="noopener noreferrer">KIRIM NAMA TEAM KE GRUP ↗</a></>:
     <><p>WhatsApp terbuka dengan nama team siap kirim. Pilih penerima lalu tekan kirim.</p><a className="primary success-cta" href={teamWhatsAppUrl(saved.teamName)} target="_blank" rel="noopener noreferrer">BUKA WHATSAPP DENGAN NAMA TEAM ↗</a><a className="success-back" href={`https://wa.me/6281545910291?text=${encodeURIComponent(summary)}`} target="_blank" rel="noopener noreferrer">KONFIRMASI KE ADMIN VIA WHATSAPP ↗</a></>}</>}
     {editLink&&<div className="success-edit"><strong>Link edit pribadi team</strong><p>Simpan link ini untuk mengubah nama team dan isian sebelum batas edit. Jika lupa, minta link ke admin event.</p>
     <input aria-label="Link edit pribadi" value={editLink} readOnly onFocus={e=>e.target.select()}/>
