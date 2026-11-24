@@ -188,3 +188,10 @@ Form Data Team & Player sekarang selalu membuka pilihan nama event dalam keadaan
 - Event yang dipilih di Admin Data Player Event tersimpan di URL dan browser, sehingga reload membuka event yang sama. Saat menyunting event pada dashboard admin, ID event juga tersimpan di URL hingga disimpan atau dibatalkan.
 - Pilihan event Turnamen, periode laporan Keuangan, papan Live Leaderboard/Desain, serta tab Member dan Layanan juga tersimpan di URL agar reload kembali ke tampilan yang dipilih.
 - Tabel `roster_draws` dibuat otomatis ketika Admin Data Player Event dipakai. SQL manual tersedia di `sql/roster_draws_2026_11_24.sql`. Tidak ada data lama yang dihapus atau dimigrasikan.
+
+### Konfirmasi WhatsApp setelah submit (v415)
+
+- Setelah pendaftaran team baru berhasil tersimpan, halaman konfirmasi membuka WhatsApp dengan teks `Nama Team: [nama team]`. Peserta memilih grup atau penerima dan menekan kirim sendiri. Penyimpanan hasil edit tidak membuka WhatsApp ulang.
+- Token undangan dan token edit tidak ikut dalam pesan WhatsApp. Halaman konfirmasi tidak mengirim referrer ke situs luar; link edit tetap terlihat jika peserta kembali ke halaman tersebut.
+- Link pendaftaran umum tetap memilih event yang dituju, sedangkan undangan pribadi tetap berlaku. Jika WhatsApp tidak terbuka otomatis, tombol pada halaman konfirmasi dapat dipakai.
+- Perbandingan ZIP v407 dengan source aktif v414 dan batas audit tercatat di `docs/AUDIT-2026-11-24-WHATSAPP.md`. Tidak ada migrasi database untuk perubahan ini.
