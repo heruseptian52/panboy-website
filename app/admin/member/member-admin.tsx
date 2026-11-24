@@ -197,6 +197,13 @@ export default function MemberAdmin() {
     [msg, setMsg] = useState(""),
     [playerUpload, setPlayerUpload] = useState<{ target: "player1" | "player2"; text: string } | null>(null),
     [managementFiles, setManagementFiles] = useState<Record<number, File>>({});
+  function selectTab(next: "list" | "add" | "benefit" | "settings" | "management") {
+    setTab(next);
+    const url = new URL(location.href);
+    url.searchParams.set("tab", next);
+    if (next !== "management" && url.hash === "#management") url.hash = "";
+    history.replaceState(history.state, "", url);
+  }
   async function load() {
     const [a, b, c] = await Promise.all([
       fetch("/api/admin/members"),
@@ -239,7 +246,7 @@ export default function MemberAdmin() {
   }
   useEffect(() => {
     void load();
-    const openManagement = () => { if (location.hash === "#management") setTab("management"); };
+    const openManagement = () => { const saved = new URL(location.href).searchParams.get("tab"); if (location.hash === "#management") selectTab("management"); else if (saved === "list" || saved === "add" || saved === "benefit" || saved === "settings" || saved === "management") setTab(saved); };
     openManagement();
     window.addEventListener("hashchange", openManagement);
     return () => window.removeEventListener("hashchange", openManagement);
@@ -265,7 +272,7 @@ export default function MemberAdmin() {
     setMsg("Data member berhasil disimpan.");
     setMember(emptyMember);
     setMemberId(null);
-    setTab("list");
+    selectTab("list");
     load();
   }
   async function saveBenefit(e: FormEvent) {
@@ -545,7 +552,7 @@ export default function MemberAdmin() {
     <section className="member-manager">
       <nav className="member-admin-tabs">
         <button
-          onClick={() => setTab("list")}
+          onClick={() => selectTab("list")}
           className={tab === "list" ? "active" : ""}
         >
           DAFTAR MEMBER
@@ -554,25 +561,25 @@ export default function MemberAdmin() {
           onClick={() => {
             setMember(emptyMember);
             setMemberId(null);
-            setTab("add");
+            selectTab("add");
           }}
           className={tab === "add" ? "active" : ""}
         >
           TAMBAH MEMBER
         </button>
         <button
-          onClick={() => setTab("benefit")}
+          onClick={() => selectTab("benefit")}
           className={tab === "benefit" ? "active" : ""}
         >
           BENEFIT MEMBER
         </button>
         <button
-          onClick={() => setTab("settings")}
+          onClick={() => selectTab("settings")}
           className={tab === "settings" ? "active" : ""}
         >
           PENGATURAN MEMBER
         </button>
-        <button onClick={()=>setTab("management")} className={tab==="management"?"active":""}>Management</button>
+        <button onClick={()=>selectTab("management")} className={tab==="management"?"active":""}>Management</button>
         <a href="/admin/member-dues">IURAN MEMBER</a>
       </nav>
       <div className="member-stats">
@@ -649,7 +656,7 @@ export default function MemberAdmin() {
                       sortOrder: x.sortOrder,
                     });
                     setPlayerUpload(null);
-                    setTab("add");
+                    selectTab("add");
                   }}
                 >
                   EDIT

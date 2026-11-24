@@ -426,7 +426,7 @@ export default function Designer() {
             <p>Pilih leaderboard yang sudah dibuat.</p>
           </div>
         </div>
-        <select value={id} onChange={(e) => setId(Number(e.target.value))}>
+        <select value={id} onChange={(e) => {const next=Number(e.target.value);setId(next);const url=new URL(location.href);url.searchParams.set("board",String(next));history.replaceState(history.state,"",url)}}>
           <option value="0">Pilih leaderboard</option>
           {boards.map((b) => (
             <option value={b.id} key={b.id}>
@@ -474,7 +474,7 @@ export default function Designer() {
           </section>
           <label>
             Pilih leaderboard
-            <select value={id} onChange={(e) => setId(Number(e.target.value))}>
+            <select value={id} onChange={(e) => {const next=Number(e.target.value);setId(next);const url=new URL(location.href);url.searchParams.set("board",String(next));history.replaceState(history.state,"",url)}}>
               {boards.map((b) => (
                 <option value={b.id} key={b.id}>
                   {b.name}

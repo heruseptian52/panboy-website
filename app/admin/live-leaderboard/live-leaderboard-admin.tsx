@@ -49,7 +49,8 @@ export default function LiveLeaderboardAdmin() {
       .then((r) => r.json())
       .then((x) => {
         setBoards(x.boards || []);
-        if (x.boards?.[0]) setBoardId(x.boards[0].id);
+        const saved=Number(new URL(location.href).searchParams.get("board"));
+        if (x.boards?.length) setBoardId(x.boards.some((board:{id:number})=>board.id===saved)?saved:x.boards[0].id);
       });
   }, []);
   useEffect(() => {
@@ -57,6 +58,7 @@ export default function LiveLeaderboardAdmin() {
     setData(null);
     void loadBoard(boardId);
   }, [boardId]);
+  function chooseBoard(id:number){setBoardId(id);const url=new URL(location.href);url.searchParams.set("board",String(id));history.replaceState(history.state,"",url)}
   async function loadBoard(id=boardId) {
     Promise.all([
       fetch(`/api/admin/live-leaderboard?id=${id}`, {
@@ -289,7 +291,7 @@ export default function LiveLeaderboardAdmin() {
           PILIH LEADERBOARD
           <select
             value={boardId}
-            onChange={(e) => setBoardId(Number(e.target.value))}
+            onChange={(e) => chooseBoard(Number(e.target.value))}
           >
             {boards.map((x) => (
               <option key={x.id} value={x.id}>
@@ -311,7 +313,7 @@ export default function LiveLeaderboardAdmin() {
           PILIH LEADERBOARD
           <select
             value={boardId}
-            onChange={(e) => setBoardId(Number(e.target.value))}
+            onChange={(e) => chooseBoard(Number(e.target.value))}
           >
             {boards.map((x) => (
               <option key={x.id} value={x.id}>
