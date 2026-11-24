@@ -1,0 +1,53 @@
+.live-admin{display:grid;grid-template-columns:330px minmax(0,1fr);min-height:calc(100vh - 64px);background:#080808}
+.live-settings{padding:18px;background:#0d0d0e;border-right:1px solid #49391c;overflow:auto;max-height:calc(100vh - 64px);position:sticky;top:0}
+.live-settings label,.live-admin-loading label{display:grid;gap:6px;margin:10px 0;color:#d1aa4e;font-size:9px;letter-spacing:1px}
+.live-settings input,.live-settings select,.live-admin-loading select{min-height:39px;background:#070707;border:1px solid #43371f;color:#fff;padding:8px}
+.live-settings input[type=color]{padding:3px}
+.live-setting-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
+.live-template-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+.live-template-actions button,.live-preview-head button,.live-save{padding:10px;background:#17130d;border:1px solid #5a461f;color:#e3b94f;font-size:8px;font-weight:900}
+.live-template-actions .danger{color:#ff8585}
+.live-settings .check{display:flex;align-items:center}
+.live-settings .check input{min-height:auto}
+.live-save{width:100%;min-height:48px;background:#d2a33c;color:#080808;margin-top:12px}
+.live-workspace{min-width:0;padding:18px}
+.live-preview-head{display:flex;align-items:center;justify-content:space-between}
+.live-preview-head h1{font-size:22px;margin:0}
+.live-preview-head p{font-size:9px;color:#8d7541}
+.live-preview-stage{width:100%;height:auto;aspect-ratio:16/9;border:1px solid #332a19;background:linear-gradient(45deg,#101010 25%,#181818 25%,#181818 50%,#101010 50%,#101010 75%,#181818 75%);background-size:20px 20px;display:flex;padding:24px;overflow:hidden}
+.live-preview-stage.right{justify-content:flex-end}
+.live-preview-stage.left{justify-content:flex-start}
+.obs-url{display:flex;margin:10px 0 24px}
+.obs-url input{width:100%;padding:13px;background:#070707;border:1px solid #44371e;color:#fff}
+.live-controls h2{font-size:20px}
+.live-controls>article{display:grid;grid-template-columns:32px 38px minmax(130px,1fr) 145px 145px 1.7fr 1.5fr;align-items:center;gap:9px;padding:9px;border-bottom:1px solid #2d281d;background:#0d0d0e}
+.operator-slot{color:#d7a936;font-weight:900;text-align:center;font-size:13px;letter-spacing:.5px}
+.live-controls>article>img{width:34px;height:34px;object-fit:contain}
+.live-controls>article>strong{white-space:nowrap;overflow:hidden}
+.score-step{display:grid;grid-template-columns:1fr 34px 34px;align-items:center;gap:4px}
+.score-step span{font-size:10px}
+.score-step button,.player-statuses button,.quick-status button{min-height:32px;background:#171717;border:1px solid #3c3527;color:#eee;font-size:8px}
+.player-statuses,.quick-status{display:flex;gap:4px}
+.player-statuses button.alive{border-color:#24d99c;color:#44efb7}
+.player-statuses button.knocked{border-color:#d54545;color:#ff7474}
+.player-statuses button.eliminated{opacity:.45}
+.quick-status{flex-wrap:wrap}
+.live-admin-loading{padding:30px}
+.live-admin-loading select{max-width:400px}
+
+@media(max-width:1100px){.live-admin{grid-template-columns:1fr}
+.live-settings{position:static;max-height:none;border-right:0}
+.live-controls>article{grid-template-columns:28px 32px 1fr 130px 130px}
+.player-statuses,.quick-status{grid-column:2/-1}
+}
+@media(max-width:650px){.live-workspace{padding:8px}
+.live-setting-grid{grid-template-columns:1fr 1fr}
+.live-preview-stage{padding:8px}
+.live-controls>article{grid-template-columns:28px 32px 1fr}
+.score-step,.player-statuses,.quick-status{grid-column:1/-1}
+.player-statuses,.quick-status{display:grid;grid-template-columns:repeat(2,1fr)}
+.live-preview-head{align-items:flex-start;gap:10px}
+.live-preview-head button{max-width:120px}
+}
+.live-control-title{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}.live-control-title h2{margin:0}.live-control-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.live-control-title .danger{width:auto;padding:10px 16px;border:1px solid #9b2930;background:#2a0a0d;color:#ff7b83;font-weight:900;cursor:pointer}.live-control-title .danger:disabled{opacity:.5;cursor:wait}
+.live-preview-overlay{position:relative;overflow:hidden;padding:0!important}.live-preview-overlay iframe{position:absolute;inset:0;width:1920px;height:1080px;border:0;transform-origin:top left;background:transparent;pointer-events:none}

@@ -1,0 +1,3 @@
+/* Keep the membership payment CTA readable on the gold button. */
+.member-dues-link { color: #000 !important; }
+.member-status{display:flex;flex-direction:column;align-items:center;gap:3px;margin:8px 0 4px;font-size:11px;letter-spacing:1px}.member-status b{padding:4px 10px;border-radius:999px;font-size:10px}.member-status.active b{background:#123c28;color:#72e6a0;border:1px solid #2b8c58}.member-status.inactive b{background:#2a1717;color:#e89090;border:1px solid #774040}.member-status span{color:#aaa;font-size:10px;letter-spacing:.3px}

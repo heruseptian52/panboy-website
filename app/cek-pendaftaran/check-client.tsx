@@ -1,0 +1,8 @@
+"use client";
+import { FormEvent, useState } from "react";
+export default function CheckClient({ initialCode = "" }: { initialCode?: string }) {
+  const [result,setResult]=useState<Record<string,unknown>|null>(null),[message,setMessage]=useState("");
+  async function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();const data=new FormData(event.currentTarget),response=await fetch(`/api/registrations?code=${encodeURIComponent(String(data.get("code")))}&whatsapp=${encodeURIComponent(String(data.get("whatsapp")))}`),output=await response.json();if(!response.ok){setResult(null);setMessage(output.error||"Tidak ditemukan");return}setMessage("");setResult(output)}
+  const roster=(result?.roster as Array<Record<string,unknown>>)||[];
+  return <><form className="check-form" onSubmit={submit}><label>KODE PENDAFTARAN<input name="code" defaultValue={initialCode} required placeholder="PNB-..."/></label><label>WHATSAPP KAPTEN<input name="whatsapp" required inputMode="tel" placeholder="08xxxxxxxxxx"/></label><button className="button gold">CEK STATUS →</button></form>{message&&<p className="check-error">{message}</p>}{result&&<section className="check-result"><div className="check-status"><span>{String(result.registrationStatus).toUpperCase()}</span><b>PEMBAYARAN: {String(result.paymentStatus).toUpperCase()}</b></div><small>{String(result.eventTitle)}</small><h2>{String(result.teamName)}</h2><p>Kapten: {String(result.captainName)} · {String(result.eventDate)}</p><div className="check-roster">{roster.map((p)=><div key={String(p.slotNumber)}><b>{String(p.slotNumber).padStart(2,"0")}</b><span>{String(p.nickname)}<small>ID {String(p.pubgId)}</small></span></div>)}</div></section>}</>;
+}

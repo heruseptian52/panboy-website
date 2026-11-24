@@ -1,0 +1,2 @@
+ALTER TABLE `live_leaderboard_configs` ADD `elimination_events_json` text DEFAULT '[]' NOT NULL;--> statement-breakpoint
+ALTER TABLE `live_leaderboard_configs` ADD `match_epoch` integer DEFAULT 1 NOT NULL;

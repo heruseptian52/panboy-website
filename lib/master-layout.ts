@@ -1,0 +1,14 @@
+import type { Layout } from "./leaderboard-render";
+export const MASTER_LAYOUT_KEY="leaderboard_master_layout";
+export type MasterLayout=Required<Pick<Layout,"rowStart"|"rowEnd"|"rowGap"|"rankX"|"logoX"|"nameX"|"wwcdX"|"killsX"|"placementX"|"totalX"|"fontSize"|"logoSize">>;
+export const masterDefaults:MasterLayout={rowStart:18,rowEnd:92,rowGap:0,rankX:4.6,logoX:11.5,nameX:14,wwcdX:34,killsX:38,placementX:42,totalX:46,fontSize:28,logoSize:76};
+export const masterKeys=(Object.keys(masterDefaults)as Array<keyof MasterLayout>);
+export const LEADERBOARD_WIDE_LOCKED:Readonly<Layout>=Object.freeze({lockedVariant:"LEADERBOARD_WIDE_LOCKED",followMaster:false,columns:2,headerStyle:"short",rowStyle:"rankBadge",rowStart:15,rowEnd:94,rowGap:0,fontSize:40,logoSize:70,rankX:3.5,logoX:7.2,nameX:11.2,wwcdX:28.7,killsX:35.5,placementX:41,totalX:47.2,textColor:"#17120e",accentColor:"#fff4de",rowColor:"#eee8df",alternateRowColor:"#eee8df",headerColor:"#9b3d0b",qualifiedColor:"#eee8df",qualifiedTextColor:"#17120e",normalRankColor:"#eee8df",totalColor:"#17120e"});
+export const LEADERBOARD_VERTICAL_LOCKED:Readonly<Layout>=Object.freeze({lockedVariant:"LEADERBOARD_VERTICAL_LOCKED",followMaster:false,columns:1,headerStyle:"short",rowStyle:"qualifiedRows",rowStart:12,rowEnd:94,rowGap:0,fontSize:42,logoSize:76,rankX:5.5,logoX:12,nameX:19,wwcdX:65,killsX:75,placementX:85,totalX:96});
+export function lockedVariant(layout:Layout){if(layout.lockedVariant)return layout.lockedVariant;if(layout.columns===2&&layout.headerStyle==="short"&&layout.rowStyle==="rankBadge")return"LEADERBOARD_WIDE_LOCKED";if(layout.columns===1&&layout.headerStyle==="short"&&layout.rowStyle==="qualifiedRows")return"LEADERBOARD_VERTICAL_LOCKED";return null}
+export function isFixedPubgmSplit(layout:Layout){return lockedVariant(layout)==="LEADERBOARD_WIDE_LOCKED"}
+export function isLockedLeaderboard(_layout:Layout){return false}
+export function applyLockedLeaderboard(layout:Layout):Layout{return layout}
+export function preserveLockedLeaderboard(next:Layout,_current:Layout):Layout{return next}
+export function sanitizeMaster(x:Partial<MasterLayout>):MasterLayout{const out={...masterDefaults};for(const key of masterKeys){const n=Number(x[key]);if(Number.isFinite(n))out[key]=n}out.rowStart=Math.max(0,Math.min(95,out.rowStart));out.rowEnd=Math.max(out.rowStart+1,Math.min(100,out.rowEnd));out.rowGap=Math.max(0,Math.min(200,out.rowGap));out.fontSize=Math.max(10,Math.min(80,out.fontSize));out.logoSize=Math.max(15,Math.min(100,out.logoSize));return out}
+export function effectiveLayout(layout:Layout,master:MasterLayout):Layout{const locked=applyLockedLeaderboard(layout);if(isLockedLeaderboard(locked))return locked;const base={...locked,followMaster:locked.followMaster!==false};return base.followMaster?{...base,...master}:base}

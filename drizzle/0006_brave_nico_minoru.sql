@@ -1,0 +1,1 @@
+ALTER TABLE `events` ADD `start_date` text DEFAULT '' NOT NULL;

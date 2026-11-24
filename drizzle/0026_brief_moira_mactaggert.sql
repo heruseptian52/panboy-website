@@ -1,0 +1,1 @@
+ALTER TABLE `scoreboard_teams` ADD `short_name` text DEFAULT '' NOT NULL;

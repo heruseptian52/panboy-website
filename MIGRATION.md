@@ -1,33 +1,9 @@
-# Migrasi Panboy dari ChatGPT Sites
+# Alur repository Panboy Community
 
-## Target
-GitHub menjadi source utama. Website dapat diedit lewat ChatGPT/Codex, GitHub, VS Code, atau developer lain.
+Source aplikasi pada branch ini berasal dari Sites v411, commit `55dded20709fe822eea27c92b35848776d7f1f02`. GitHub `main` sebelumnya berisi kerangka migrasi Next.js/Supabase. Setelah review dan merge yang disetujui, gunakan GitHub sebagai titik awal untuk perubahan berikutnya.
 
-## Status saat ini
-- [x] Repository GitHub tersedia
-- [x] Next.js project dasar
-- [x] Beranda premium hitam/gold
-- [x] Event Panboy / Premium / Official
-- [x] Kartu event dengan prizepool, fee, periode, status, online/offline
-- [x] Tombol registrasi WhatsApp
-- [x] Placeholder Top Up UC, Jual Akun, Kerja Sama
-- [ ] Import poster/aset dari website lama
-- [ ] Supabase database
-- [ ] Login admin + multi-role
-- [ ] CRUD event dari admin
-- [ ] Upload logo/poster/video/music
-- [ ] Slider & efek yang bisa diatur admin
-- [ ] Video premium auto-fit portrait/landscape
-- [ ] Musik background + ducking saat video aktif
-- [ ] Midtrans QRIS
-- [ ] Slot otomatis setelah pembayaran sukses
-- [ ] Analytics admin
-- [ ] Partnership manager
-- [ ] Countdown 24 jam
-- [ ] Search/filter/sort lengkap
-- [ ] Deploy staging
-- [ ] Uji fitur
-- [ ] Pindah DNS panboycommunity.my.id setelah staging siap
-
-## Aturan migrasi
-Jangan ubah DNS atau hapus ChatGPT Site lama sebelum versi staging selesai diuji.
+1. Uji perubahan di branch terpisah dengan `npm test`.
+2. Gunakan D1/R2 staging yang terpisah. Pasang secret melalui hosting dan mulai dengan data sintetis.
+3. Review perubahan SQL secara terpisah. Kandidat ini tidak membutuhkan migration SQL baru.
+4. Sambungkan mekanisme deploy dari GitHub ke lingkungan yang disetujui. Situs aktif belum otomatis mengikuti GitHub.
+5. Verifikasi staging, lalu jadwalkan publikasi melalui workflow yang berwenang. Catat commit yang diterapkan di produksi.

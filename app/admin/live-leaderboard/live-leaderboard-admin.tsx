@@ -1,0 +1,533 @@
+"use client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import LiveLeaderboardPanel, {
+  type LiveRow,
+} from "../../live-leaderboard-panel";
+import {
+  baseTemplate,
+  cleanTemplate,
+  freshState,
+  type LiveTemplate,
+  type PlayerStatus,
+  type TeamLiveState,
+} from "../../../lib/live-leaderboard";
+import { compareLiveTeams } from "../../../lib/live-ranking";
+type Board = { id: number; name: string };
+type Team = {
+  id: number;
+  slotNumber: number;
+  name: string;
+  shortName?: string;
+  logoUrl: string;
+};
+const statuses: PlayerStatus[] = ["alive", "knocked", "eliminated"];
+export default function LiveLeaderboardAdmin() {
+  const [boards, setBoards] = useState<Board[]>([]),
+    [boardId, setBoardId] = useState(0),
+    [data, setData] = useState<any>(null),
+    [busy, setBusy] = useState(false),
+    [msg, setMsg] = useState(""),
+    [previewScale, setPreviewScale] = useState(1),
+    saveQueue = useRef(Promise.resolve()),
+    scoreQueue = useRef(Promise.resolve()),
+    autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
+    scoreSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
+    pendingScoreDeltas = useRef(new Map<number, number>()),
+    realtimeSequence = useRef(0),
+    dataRef = useRef<any>(null),
+    previewRef = useRef<HTMLDivElement | null>(null);
+  function broadcastTeam(teamId:number,patch:Record<string,unknown>){
+    const token=String(dataRef.current?.config?.overlayToken||"");
+    if(!token||typeof BroadcastChannel==="undefined")return;
+    const channel=new BroadcastChannel(`panboy-live-${token}`);
+    channel.postMessage({type:"team-patch",teamId,patch,sequence:Date.now()*1000+(++realtimeSequence.current)});
+    channel.close();
+  }
+  useEffect(()=>{dataRef.current=data},[data]);
+  useEffect(() => {
+    fetch("/api/admin/scoreboards")
+      .then((r) => r.json())
+      .then((x) => {
+        setBoards(x.boards || []);
+        if (x.boards?.[0]) setBoardId(x.boards[0].id);
+      });
+  }, []);
+  useEffect(() => {
+    if (!boardId) return;
+    setData(null);
+    void loadBoard(boardId);
+  }, [boardId]);
+  async function loadBoard(id=boardId) {
+    Promise.all([
+      fetch(`/api/admin/live-leaderboard?id=${id}`, {
+        cache: "no-store",
+      }).then((r) => r.json()),
+      fetch(`/api/admin/scoreboard-teams?id=${id}`, {
+        cache: "no-store",
+      }).then((r) => r.json()),
+    ]).then(([live, teams]) =>
+      setData({ ...live, teams: teams.teams || live.teams }),
+    );
+  }
+  useEffect(
+    () => () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+      if (scoreSaveTimer.current) clearTimeout(scoreSaveTimer.current);
+    },
+    [],
+  );
+  useEffect(() => {
+    const element = previewRef.current;
+    if (!element) return;
+    const update = () => setPreviewScale(element.clientWidth / 1920),
+      observer = new ResizeObserver(update);
+    update();
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [data]);
+  const templates: LiveTemplate[] = (data?.config.templates || []).map(
+      (x: Partial<LiveTemplate>) => cleanTemplate(x, baseTemplate),
+    ),
+    active: LiveTemplate =
+      templates.find((x) => x.id === data?.config.activeTemplateId) ||
+      templates[0] ||
+      baseTemplate,
+    state: Record<string, TeamLiveState> = data?.config.state || {},
+    totals = new Map<number, any>(
+      (data?.totals || []).map((x: any) => [Number(x.teamId), x]),
+    );
+  const rows = useMemo<LiveRow[]>(() => {
+    if (!data) return [];
+    let x = (data.teams as Team[])
+      .map((t) => {
+        const s = state[t.id] || freshState(),
+          b = totals.get(t.id) || {};
+        return {
+          id: t.id,
+          rank: 0,
+          name: t.name,
+          shortName: t.shortName,
+          logoUrl: t.logoUrl,
+          points: Number(b.points || 0),
+          elims: Number(b.elims || 0),
+          overallElims:Number(b.overallElims||0),
+          wwcd:Number(b.wwcd||0),
+          placementPoints:Number(b.placementPoints||0),
+          lastPlacement:Number(b.lastPlacement||0),
+          slotNumber:t.slotNumber,
+          players: s.players,
+        };
+      })
+      .sort((a, b) => compareLiveTeams(a,b,data.config.rankingTieBreak||[]))
+      .map((r, i) => ({ ...r, rank: i + 1 }));
+    if (data.config.displayLimit !== "all")
+      x = x.slice(0, Number(data.config.displayLimit));
+    return x;
+  }, [data, state]);
+  function persistLive(configData: any) {
+    saveQueue.current = saveQueue.current
+      .then(() =>
+        fetch("/api/admin/live-leaderboard", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: boardId, ...configData }),
+        }).then(() => undefined),
+      )
+      .catch(() => undefined);
+  }
+  function schedulePreview(configData: any) {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      persistLive(configData);
+      autoSaveTimer.current = null;
+    }, 120);
+  }
+  function config(p: any, autoSave = true) {
+    setData((d: any) => {
+      const next = { ...d, config: { ...d.config, ...p } };
+      if (autoSave) schedulePreview(next.config);
+      return next;
+    });
+  }
+  function setTemplate(p: Partial<LiveTemplate>) {
+    config({
+      templates: templates.map((x) =>
+        x.id === active.id ? { ...x, ...p } : x,
+      ),
+    });
+  }
+  function teamState(id: number, p: Partial<TeamLiveState>) {
+    const current=dataRef.current;
+    if(!current)return;
+    const currentState:Record<string,TeamLiveState>=current.config?.state||{};
+    const nextState = {
+        ...currentState,
+        [id]: { ...(currentState[id] || freshState()), ...p },
+      };
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+    }
+    const nextData={...current,config:{...current.config,state:nextState}};
+    dataRef.current=nextData;
+    setData(nextData);
+    broadcastTeam(id,{players:nextState[id].players});
+    saveQueue.current=saveQueue.current.then(()=>fetch("/api/admin/live-leaderboard",{
+      method:"PUT",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({id:boardId,action:"updateTeamState",teamId:id,players:nextState[id].players}),
+    }).then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||"Gagal memperbarui status team.");if(result.winnerResult&&typeof BroadcastChannel!=="undefined"){const channel=new BroadcastChannel(`panboy-scoreboard-${boardId}`);channel.postMessage({type:"result",result:result.winnerResult,sequence:Date.now()});channel.close()}})).catch(error=>{setMsg(error instanceof Error?error.message:"Gagal memperbarui status team.");void loadBoard()});
+  }
+  function quick(id: number, n: number) {
+    const s = dataRef.current?.config?.state?.[id] || freshState();
+    teamState(id, {
+      ...s,
+      players: [0, 1, 2, 3].map((i) =>
+        i < n ? "alive" : "eliminated",
+      ) as TeamLiveState["players"],
+    });
+  }
+  function cyclePlayer(id:number,index:number){
+    const s=dataRef.current?.config?.state?.[id]||freshState(),p=[...s.players] as TeamLiveState["players"],status=p[index];
+    p[index]=statuses[(statuses.indexOf(status)+1)%3];
+    teamState(id,{players:p});
+  }
+  async function save() {
+    setBusy(true);
+    const r = await fetch("/api/admin/live-leaderboard", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: boardId, ...data.config }),
+    });
+    setBusy(false);
+    setMsg(
+      r.ok
+        ? "LIVE LEADERBOARD TERSIMPAN & OBS DIPERBARUI."
+        : "GAGAL MENYIMPAN.",
+    );
+  }
+  function duplicate() {
+    const id = `custom-${Date.now()}`,
+      copy = { ...active, id, name: `${active.name} COPY` };
+    config({ templates: [...templates, copy], activeTemplateId: id });
+  }
+  function removeTemplate() {
+    if (templates.length <= 1)
+      return setMsg("MINIMAL HARUS ADA SATU TEMPLATE.");
+    if (!confirm(`Hapus template ${active.name}?`)) return;
+    const next = templates.filter((x) => x.id !== active.id);
+    config({ templates: next, activeTemplateId: next[0].id });
+  }
+  async function resetMatch() {
+    if (!confirm("Reset status eliminasi dan ALIVE untuk match baru?")) return;
+    setBusy(true);
+    flushScoresNow();
+    await Promise.all([saveQueue.current,scoreQueue.current]);
+    const r = await fetch("/api/admin/live-leaderboard", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: boardId, action: "resetMatch" }),
+    });
+    if (r.ok) {
+      const fresh = Object.fromEntries(
+        (data.teams as Team[]).map((team) => [team.id, freshState()]),
+      );
+      config({ state: fresh, winnerHidden: false }, false);
+      setMsg("MATCH BARU DIMULAI. STATUS ELIMINASI SUDAH DIRESET.");
+    } else setMsg("GAGAL RESET MATCH.");
+    setBusy(false);
+  }
+  async function nextMatch(){if(!confirm("Selesaikan match aktif dan mulai match berikutnya? PTS tetap, ELIMS dan ALIVE kembali ke awal."))return;setBusy(true);flushScoresNow();await Promise.all([saveQueue.current,scoreQueue.current]);const r=await fetch("/api/admin/live-leaderboard",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:boardId,action:"nextMatch"})}),x=await r.json();if(r.ok){await loadBoard();setMsg(`MATCH ${x.matchNumber} DIMULAI. PTS DIBAWA, ELIMS DIRESET 0.`)}else setMsg(x.error||"GAGAL MEMULAI MATCH BERIKUTNYA.");setBusy(false)}
+  function flushScoresNow(){
+    if(scoreSaveTimer.current){clearTimeout(scoreSaveTimer.current);scoreSaveTimer.current=null}
+    const changes=[...pendingScoreDeltas.current.entries()].filter(([,delta])=>delta!==0);
+    pendingScoreDeltas.current.clear();
+    if(!changes.length)return;
+    scoreQueue.current=scoreQueue.current.then(async()=>{
+      const results=await Promise.all(changes.map(async([teamId,delta])=>{
+        const r=await fetch("/api/admin/live-leaderboard",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:boardId,action:"adjustScore",teamId,field:"elims",delta})});
+        const x=await r.json();
+        if(!r.ok)throw new Error(x.error||"Gagal memperbarui eliminasi.");
+        return x.team;
+      }));
+      setData((current:any)=>{const next={...current,totals:(current.totals||[]).map((row:any)=>{
+        const saved=results.find((team:any)=>Number(team?.teamId)===Number(row.teamId));
+        return saved&&!pendingScoreDeltas.current.has(Number(row.teamId))?{...row,...saved}:row;
+      })};dataRef.current=next;return next});
+    }).catch((error)=>{setMsg(error instanceof Error?error.message:"Gagal memperbarui eliminasi.");void loadBoard()});
+  }
+  function updateElims(teamId:number,delta:number){
+    const current=dataRef.current;
+    if(!current)return;
+    const totalsNow=current.totals||[],existing=totalsNow.find((row:any)=>Number(row.teamId)===teamId),oldElims=Number(existing?.elims||0),nextElims=Math.max(0,oldElims+delta),applied=nextElims-oldElims;
+    if(!applied)return;
+    const found=Boolean(existing),nextTotals=(found?totalsNow:[...totalsNow,{teamId,points:0,elims:0,overallElims:0}]).map((row:any)=>Number(row.teamId)!==teamId?row:{...row,elims:nextElims,overallElims:Math.max(0,Number(row.overallElims||0)+applied),points:Math.max(0,Number(row.points||0)+applied)}),nextData={...current,totals:nextTotals};
+    dataRef.current=nextData;
+    setData(nextData);
+    broadcastTeam(teamId,{elims:nextElims,overallElims:Math.max(0,Number(existing?.overallElims||0)+applied),points:Math.max(0,Number(existing?.points||0)+applied)});
+    pendingScoreDeltas.current.set(teamId,(pendingScoreDeltas.current.get(teamId)||0)+applied);
+    if(scoreSaveTimer.current)clearTimeout(scoreSaveTimer.current);
+    scoreSaveTimer.current=setTimeout(flushScoresNow,20);
+  }
+  async function hideWinner() {
+    setBusy(true);
+    await saveQueue.current;
+    const r = await fetch("/api/admin/live-leaderboard", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: boardId, action: "hideWinner" }),
+    });
+    if (r.ok) {
+      config({ winnerHidden: true }, false);
+      setMsg("POPUP WWCD DISEMBUNYIKAN.");
+    } else setMsg("GAGAL MENYEMBUNYIKAN WWCD.");
+    setBusy(false);
+  }
+  if (!data)
+    return (
+      <section className="live-admin-loading">
+        <label>
+          PILIH LEADERBOARD
+          <select
+            value={boardId}
+            onChange={(e) => setBoardId(Number(e.target.value))}
+          >
+            {boards.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p>
+          {boardId ? "Memuat live leaderboard..." : "Belum ada leaderboard."}
+        </p>
+      </section>
+    );
+  const url = `${location.origin}/overlay/live-leaderboard/${data.config.overlayToken}`;
+  return (
+    <section className="live-admin">
+      <aside className="live-settings">
+        <label>
+          PILIH LEADERBOARD
+          <select
+            value={boardId}
+            onChange={(e) => setBoardId(Number(e.target.value))}
+          >
+            {boards.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          TEMPLATE
+          <select
+            value={active.id}
+            onChange={(e) => config({ activeTemplateId: e.target.value })}
+          >
+            {templates.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          NAMA TEMPLATE
+          <input
+            value={active.name}
+            onChange={(e) => setTemplate({ name: e.target.value })}
+          />
+        </label>
+        <div className="live-template-actions">
+          <button onClick={duplicate}>DUPLICATE</button>
+          <button onClick={() => config({ activeTemplateId: active.id })}>
+            SET DEFAULT
+          </button>
+          <button className="danger" onClick={removeTemplate}>
+            DELETE
+          </button>
+        </div>
+        <div className="live-setting-grid">
+          {(
+            [
+              ["panelWidth", "Panel Width"],
+              ["panelHeight", "Panel Height"],
+              ["rowHeight", "Row Height"],
+              ["headerHeight", "Header Height"],
+              ["rankX", "Rank X"],
+              ["logoX", "Logo X"],
+              ["teamX", "Team X"],
+              ["ptsX", "PTS X"],
+              ["elimsX", "ELIMS X"],
+              ["aliveX", "ALIVE X"],
+              ["fontSize", "Font Size"],
+              ["logoSize", "Logo Size"],
+              ["spacing", "Spacing"],
+              ["backgroundOpacity", "BG Opacity"],
+              ["rowOpacity", "Row Opacity"],
+            ] as const
+          ).map(([k, label]) => (
+            <label key={k}>
+              {label}
+              <input
+                type="number"
+                step={
+                  k.includes("Opacity") ||
+                  k === "backgroundOpacity" ||
+                  k === "rowOpacity"
+                    ? 0.05
+                    : 1
+                }
+                value={active[k]}
+                onChange={(e) => setTemplate({ [k]: Number(e.target.value) })}
+              />
+            </label>
+          ))}
+        </div>
+        {(
+          [
+            ["backgroundColor", "Background"],
+            ["headerColor", "Header"],
+            ["aliveColor", "Alive"],
+            ["knockedColor", "Knocked"],
+            ["eliminatedColor", "Eliminated"],
+            ["dividerColor", "Divider"],
+          ] as const
+        ).map(([k, label]) => (
+          <label key={k}>
+            {label}
+            <input
+              type="color"
+              value={active[k]}
+              onChange={(e) => setTemplate({ [k]: e.target.value })}
+            />
+          </label>
+        ))}
+        <label>
+          POSISI OBS
+          <select
+            value={data.config.side}
+            onChange={(e) => config({ side: e.target.value })}
+          >
+            <option value="left">LEFT</option>
+            <option value="right">RIGHT</option>
+          </select>
+        </label>
+        <label>
+          TEAM DITAMPILKAN
+          <select
+            value={data.config.displayLimit}
+            onChange={(e) => config({ displayLimit: e.target.value })}
+          >
+            <option value="8">TOP 8</option>
+            <option value="10">TOP 10</option>
+            <option value="16">TOP 16</option>
+            <option value="all">ALL TEAM</option>
+          </select>
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={data.config.showLegend}
+            onChange={(e) => config({ showLegend: e.target.checked })}
+          />{" "}
+          SHOW LEGEND
+        </label>
+        <button className="live-save" disabled={busy} onClick={save}>
+          SAVE TEMPLATE & LIVE DATA
+        </button>
+        {msg && <p className="form-message">{msg}</p>}
+      </aside>
+      <main className="live-workspace">
+        <section className="live-preview-head">
+          <div>
+            <h1>LIVE PREVIEW OBS</h1>
+            <p>1920 × 1080 · TRANSPARENT BACKGROUND</p>
+          </div>
+          <button onClick={() => navigator.clipboard.writeText(url)}>
+            COPY URL OBS
+          </button>
+        </section>
+        <div
+          ref={previewRef}
+          className="live-preview-stage live-preview-overlay"
+        >
+          <iframe
+            key={url}
+            src={url}
+            title="Live OBS preview"
+            style={{ transform: `scale(${previewScale})` }}
+          />
+        </div>
+        <div className="obs-url">
+          <input readOnly value={url} />
+        </div>
+        <section className="live-controls">
+          <div className="live-control-title">
+            <h2>CONTROL PANEL OPERATOR</h2>
+            <div className="live-control-actions">
+              <button
+                className="danger"
+                disabled={busy || data.config.winnerHidden}
+                onClick={hideWinner}
+              >
+                HIDE WWCD
+              </button>
+              <button className="danger" disabled={busy} onClick={resetMatch}>
+                RESET MATCH BARU
+              </button>
+              <button disabled={busy} onClick={nextMatch}>NEXT MATCH</button>
+            </div>
+          </div>
+          {(data.teams as Team[]).map((team) => {
+            const s = state[team.id] || freshState(),
+              row = rows.find((x) => x.id === team.id);
+            return (
+              <article key={team.id}>
+                <span className="operator-slot" aria-label={`Slot ${team.slotNumber}`}>{String(team.slotNumber).padStart(2, "0")}</span>
+                <img src={team.logoUrl} alt="" />
+                <strong>{team.name}</strong>
+                <div className="score-step">
+                  <span title="Otomatis: Kill Point + Placement Point">PTS {row?.points ?? 0}</span>
+                </div>
+                <div className="score-step">
+                  <span>ELIMS {row?.elims ?? 0}</span>
+                  <button
+                    onClick={() => updateElims(team.id,-1)}
+                  >
+                    −
+                  </button>
+                  <button
+                    onClick={() => updateElims(team.id,1)}
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="player-statuses">
+                  {s.players.map((status, i) => (
+                    <button
+                      key={i}
+                      className={status}
+                      onClick={() => cyclePlayer(team.id,i)}
+                    >
+                      P{i + 1} {status.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                <div className="quick-status">
+                  {[4, 3, 2, 1, 0].map((n) => (
+                    <button key={n} onClick={() => quick(team.id, n)}>
+                      {n ? `${n} ALIVE` : "TEAM WIPE"}
+                    </button>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      </main>
+    </section>
+  );
+}
