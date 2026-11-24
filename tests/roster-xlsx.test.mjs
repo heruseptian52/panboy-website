@@ -70,3 +70,11 @@ test('Nama tim dan judul diperlakukan sebagai string XML, tidak sebagai formula'
   assert.match(sheet,/&lt; &amp;/);
   assert.ok(!sheet.includes('<f>'));
 });
+
+test('Bagian worksheet tersusun sesuai urutan OOXML yang diwajibkan Excel',()=>{
+  const {sheet}=generate(teams,config);
+  const tags=['<sheetPr>','<dimension ','<sheetViews>','<sheetFormatPr ','<cols>','<sheetData>','<autoFilter ','<mergeCells ','<printOptions ','<pageMargins ','<pageSetup '];
+  const offsets=tags.map(tag=>sheet.indexOf(tag));
+  assert.ok(offsets.every(x=>x>=0));
+  assert.deepEqual(offsets,[...offsets].sort((a,b)=>a-b));
+});

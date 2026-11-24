@@ -35,6 +35,7 @@ export async function ensureRosterTables() {
     catch (error) { if (!(await env.DB.prepare("PRAGMA table_info(roster_entries)").all<{name:string}>()).results.some(x=>x.name==="invitation_id")) throw error; }
   }
   await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_roster_entry_invitation ON roster_entries(invitation_id) WHERE invitation_id IS NOT NULL").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS roster_draws (event_id INTEGER PRIMARY KEY, group_count INTEGER NOT NULL, assignments_json TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
 }
 export async function hashRosterToken(token: string) {
   const bytes = new TextEncoder().encode(token);

@@ -180,3 +180,10 @@ Form Data Team & Player sekarang selalu membuka pilihan nama event dalam keadaan
 - Tabel `event_submissions` dibuat otomatis oleh `lib/event-submissions.ts` saat pertama dipakai, tanpa migrasi data lama. Kolom mencakup data event, poster, status, ID event terbit, tanggal dan identitas pemeriksa, serta alasan penolakan.
 - Baris keuangan berstatus `CANCELLED` tidak tampil di daftar admin, sementara status pembatalan dan audit tetap tersimpan. Navigasi publik memakai ikon emas seragam, dan keterangan kartu event dipadatkan.
 - Verifikasi: `npm test` membangun aplikasi dan menjalankan pengujian member serta pengajuan event.
+
+### Data Player Event, Excel dan pembagian grup (v413)
+
+- File Excel memiliki satu sheet, satu baris per team dan kolom sesuai pengaturan admin. Urutan bagian worksheet kini sesuai spesifikasi XLSX agar Microsoft Excel tidak memperbaiki file menjadi kosong. Pengaturan cetak A4 lanskap muat satu halaman.
+- Di Admin → Data Player Event, undangan pribadi dapat dibuka dan ditutup. Hasil pembagian grup mengambil team yang sudah mengirim data; jumlah grup otomatis memakai sekitar 20 team per grup atau dapat diisi sendiri (1–50). Admin menekan **Undi & Simpan**; hasil tetap tersimpan. Team baru ditandai menunggu sampai admin mengundi ulang. Hasil dapat disalin untuk dibagikan.
+- Event yang dipilih di Admin Data Player Event tersimpan di URL dan browser, sehingga reload membuka event yang sama. Saat menyunting event pada dashboard admin, ID event juga tersimpan di URL hingga disimpan atau dibatalkan.
+- Tabel `roster_draws` dibuat otomatis ketika Admin Data Player Event dipakai. SQL manual tersedia di `sql/roster_draws_2026_11_24.sql`. Tidak ada data lama yang dihapus atau dimigrasikan.

@@ -76,18 +76,23 @@ export default function AdminClient({
   const paymentEligible = ["EVENT PANBOY", "EVENT PREMIUM"].includes(
     form.category.toUpperCase(),
   );
-  async function load() {
+  async function load(restore = false) {
     const response = await fetch("/api/admin/bootstrap");
     if (response.ok) {
       const data = await response.json();
       setEvents(data.events);
+      const restored = Number(new URL(location.href).searchParams.get("event"));
+      if (restore && Number.isSafeInteger(restored) && restored > 0) {
+        const item = (data.events as EventItem[]).find(event => event.id === restored);
+        if (item) edit(item, false);
+      }
       setCategories(data.options.categories);
       setStatuses(data.options.statuses);
       setModes(data.options.modes);
     }
   }
   useEffect(() => {
-    load();
+    load(true);
   }, []);
   function change(name: string, value: string | number) {
     setForm((f) => ({ ...f, [name]: value }));
@@ -199,10 +204,16 @@ export default function AdminClient({
     );
     setForm(empty);
     setEditId(null);
+    const url = new URL(location.href);
+    url.searchParams.delete("event");
+    history.replaceState(history.state, "", url);
     await load();
   }
-  function edit(item: EventItem) {
+  function edit(item: EventItem, scroll = true) {
     setEditId(item.id);
+    const url = new URL(location.href);
+    url.searchParams.set("event", String(item.id));
+    history.replaceState(history.state, "", url);
     setForm({
       title: item.title,
       eventDate: item.eventDate,
@@ -222,7 +233,7 @@ export default function AdminClient({
       maxSlots: item.maxSlots || 0,
       sortOrder: item.sortOrder,
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function remove(id: number) {
     if (!confirm("Hapus event ini dari website?")) return;
@@ -602,6 +613,9 @@ export default function AdminClient({
                 onClick={() => {
                   setEditId(null);
                   setForm(empty);
+                  const url = new URL(location.href);
+                  url.searchParams.delete("event");
+                  history.replaceState(history.state, "", url);
                 }}
               >
                 BATAL

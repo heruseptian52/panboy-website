@@ -13,6 +13,8 @@ const publicRoute=load('../app/api/roster-events/route.ts',{'cloudflare:workers'
 const adminRoute=load('../app/api/admin/roster-events/invitations/route.ts',{'cloudflare:workers':{env},'../../../../../lib/admin-auth':{requirePermission:async()=>true},'../../../../../lib/event-rosters':rosters});
 const settingsRoute=load('../app/api/admin/roster-events/route.ts',{'cloudflare:workers':{env},'../../../../lib/admin-auth':{requirePermission:async()=>true},'../../../../lib/event-rosters':rosters,'../../../../lib/roster-xlsx':{createRosterWorkbook:()=>{}},'../../../../lib/roster-drive':{driveFolderId:()=>'',syncRosterLogo:async()=>({status:'pending',fileId:''})},'../../../../lib/roster-options':{defaultOptions:options,validateOptions:x=>x,readOptions:raw=>({...options,...JSON.parse(raw||"{}")}),readZones:()=>[],normalizeTeamPhone:()=>''},'../../../../lib/events':{ensureEventsTable:async()=>{}},'../../../../lib/settings':{ensureSettings:async()=>{}}});
 const deleteRoute=load('../app/api/admin/roster-events/entry/route.ts',{'cloudflare:workers':{env},'../../../../../lib/admin-auth':{requirePermission:async()=>true},'../../../../../lib/event-rosters':rosters});
+const drawLogic=load('../lib/roster-draw.ts',{});
+const drawRoute=load('../app/api/admin/roster-events/draw/route.ts',{'cloudflare:workers':{env},'../../../../../lib/admin-auth':{requirePermission:async()=>true},'../../../../../lib/event-rosters':rosters,'../../../../../lib/roster-draw':drawLogic});
 async function post(route,url,body){return route.POST(new Request('http://localhost'+url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}))}
 test('undangan tim, batas slot, edit tanpa penambahan, hapus dan daftar ulang',async()=>{
  await rosters.ensureRosterTables();
@@ -88,4 +90,18 @@ test('tautan umum dan undangan berbagi kuota dan kontrol publik tidak menghapus 
  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM roster_entries WHERE event_id=?').get(id).n,2);
  db.prepare('UPDATE roster_events SET stopped=1 WHERE id=?').run(id);
  assert.equal((await post(publicRoute,'/api/roster-events',{eventId:id,teamName:'UMUM 1',editToken})).status,403);
+});
+
+test('hasil grup tersimpan; peserta baru tertunda sampai admin mengundi ulang',async()=>{
+ const db=env.DB.db;
+ const id=Number(db.prepare('INSERT INTO roster_events(title,deadline,created_at) VALUES(?,?,?)').run('GRUP TEST','2028-01-01',new Date().toISOString()).lastInsertRowid);
+ for(let i=0;i<3;i++)db.prepare('INSERT INTO roster_entries(event_id,team_name,players_json,edit_token_hash,updated_at) VALUES(?,?,?,?,?)').run(id,`GRUP ${i}`, '[]',`draw-hash-${i}`,new Date().toISOString());
+ const created=await post(drawRoute,'/api/admin/roster-events/draw',{eventId:id,groupCount:2});
+ assert.equal(created.status,200,await created.clone().text());
+ let saved=await created.json();assert.equal(saved.assignments.length,3);assert.equal(saved.groupCount,2);
+ db.prepare('INSERT INTO roster_entries(event_id,team_name,players_json,edit_token_hash,updated_at) VALUES(?,?,?,?,?)').run(id,'LATE TEAM','[]','draw-late',new Date().toISOString());
+ saved=await (await drawRoute.GET(new Request(`http://localhost/api/admin/roster-events/draw?eventId=${id}`))).json();
+ assert.equal(saved.assignments.length,3);assert.equal(saved.pending.length,1);
+ saved=await (await post(drawRoute,'/api/admin/roster-events/draw',{eventId:id,groupCount:2})).json();
+ assert.equal(saved.assignments.length,4);assert.equal(saved.pending.length,0);
 });
