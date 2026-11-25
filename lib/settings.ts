@@ -26,6 +26,7 @@ export const defaults = {
   popupEventId: "",
   popupLinkUrl: "",
   featuredMemberId: "",
+  featuredMemberOrder: "",
   musicUrl: "",
   musicTitle: "MUSIK PANBOY",
   musicEnabled: "false",

@@ -17,6 +17,7 @@ import PremiumVideoPlayer from "./premium-video-player";
 import { getFeatureFlags } from "../lib/features";
 import { getCommunityMembers } from "../lib/members";
 import MemberHeroCarousel from "./member-hero-carousel";
+import {orderHomeMembers} from "../lib/member-home-order";
 import { getHomeData } from "../lib/home-data";
 import PanboyIcon from "./panboy-icon";
 import SitePopup from "./site-popup";
@@ -154,7 +155,7 @@ export default async function Home() {
           backgroundPosition: "center",
         }
       : undefined;
-  const memberShowcase = [...members].sort((a,b) => Number(b.id === Number(s.featuredMemberId)) - Number(a.id === Number(s.featuredMemberId)) || a.sortOrder - b.sortOrder);
+  const memberShowcase = orderHomeMembers(members,s.featuredMemberOrder,s.featuredMemberId);
   const selectedPopupEvent = events.find(e => String(e.id) === s.popupEventId);
   const popupUrl = (s.popupMediaType === "event" || s.popupLinkType === "event") ? (selectedPopupEvent ? `/event/${selectedPopupEvent.id}` : "") : /^(https?:\/\/)/i.test(s.popupLinkUrl.trim()) ? s.popupLinkUrl.trim() : "";
   const showVideo = s.premiumAdEnabled === "true" && Boolean(s.premiumAdVideoUrl);
@@ -247,7 +248,7 @@ export default async function Home() {
               <div className="refresh-hero-actions"><a className="button gold" href="#all-event">{s.heroButton}<span>↗</span></a><a className="button refresh-outline" href="/member"><PanboyIcon name="member"/>Jadi bagian dari kami</a></div>
             </div>
             <MemberHeroCarousel
-              members={members.map((member) => ({
+              members={memberShowcase.map((member) => ({
                 id: member.id,
                 teamName: member.teamName,
                 logoUrl: member.logoUrl,
@@ -316,7 +317,7 @@ export default async function Home() {
         )}
         {s.premiumAdPosition === "after_events" && premiumSection}
         {!!showcase.ads.length&&<ShowcaseSection ads={showcase.ads} whatsapp={showcase.whatsapp}/>}
-        <section className="container refresh-members" aria-labelledby="refresh-member-title"><div className="refresh-heading"><div><p className="eyebrow">MORE THAN JUST A TEAM</p><h2 id="refresh-member-title">Satu komunitas. Satu keluarga<span>.</span></h2><p>Mereka yang ikut membangun cerita Panboy Community.</p></div><a href="/member">Semua member ↗</a></div><div className="refresh-member-grid">{memberShowcase.map(m=><a href="/member" key={m.id}>{m.logoUrl?<img src={m.logoUrl} alt={m.teamName} loading="lazy" decoding="async"/>:<PanboyIcon name="member"/>}<b>{m.teamName}</b><small>Member komunitas · {m.membershipTier || "C"}</small></a>)}</div><div className="refresh-member-join"><PanboyIcon name="member"/><div><p className="eyebrow">TEMPAT UNTUK TIM KAMU</p><h3>Langkah besar dimulai dari kebersamaan.</h3><p>Kenali program dan benefit member Panboy Community.</p></div><a className="button gold" href="/member">Lihat benefit member ↗</a></div></section>
+        <section className="container refresh-members" aria-labelledby="refresh-member-title"><div className="refresh-heading"><div><p className="eyebrow">MORE THAN JUST A TEAM</p><h2 id="refresh-member-title">Satu komunitas. Satu keluarga<span>.</span></h2><p>Mereka yang ikut membangun cerita Panboy Community.</p></div><a href="/member">Semua member ↗</a></div><div className="refresh-member-grid">{memberShowcase.map(m=><a href="/member" key={m.id}>{m.logoUrl?<img src={m.logoUrl} alt={m.teamName} loading="lazy" decoding="async"/>:<PanboyIcon name="member"/>}<b>{m.teamName}</b></a>)}</div><div className="refresh-member-join"><PanboyIcon name="member"/><div><p className="eyebrow">TEMPAT UNTUK TIM KAMU</p><h3>Langkah besar dimulai dari kebersamaan.</h3><p>Kenali program dan benefit member Panboy Community.</p></div><a className="button gold" href="/member">Lihat benefit member ↗</a></div></section>
         <section className="container refresh-services"><div className="refresh-heading"><div><p className="eyebrow">LET’S MAKE IT HAPPEN</p><h2>Dari ide, jadi panggung nyata<span>.</span></h2><p>Semua kebutuhan tim dan event kamu, dikerjakan bersama Panboy.</p></div></div><div className="refresh-service-grid">{[{icon:"design" as const,title:"Design kreatif",text:"Logo, poster, leaderboard, dan identitas visual untuk tim serta event kamu.",href:"/jasa-design",tag:"VISUAL IDENTITY"},{icon:"handle" as const,title:"Handle event",text:"Pengelolaan turnamen, room esport, spected, dan hitung poin.",href:"/handle-event",tag:"TOURNAMENT MANAGEMENT"},{icon:"live" as const,title:"Live streaming",text:"Hadirkan setiap momen melalui siaran, observer, dan caster.",href:"/live-streaming",tag:"BROADCAST & CASTER"}].map((x,i)=><a href={x.href} key={x.title}><div><PanboyIcon name={x.icon}/><small>0{i+1}</small></div><p className="eyebrow">{x.tag}</p><h3>{x.title}</h3><p>{x.text}</p><span>Lihat layanan <b>↗</b></span></a>)}</div></section>
 
         {f.collaboration && (
@@ -407,7 +408,7 @@ export default async function Home() {
             <div className="footer-about"><div className="brand footer-brand"><img src={s.logoUrl} alt="Logo Panboy" loading="lazy" decoding="async"/><span>{s.brandName}</span></div>{!s.footerText.trim().startsWith("©") && <p>{s.footerText}</p>}<small>{s.footerTagline}</small></div>
             <nav className="footer-column" aria-label="Jelajahi Panboy"><h2>JELAJAHI</h2><a href="#all-event">Semua Event</a><a href="/member">Member Community</a><a href="/management">Management</a><a href="/community-profile">Profil Panboy</a></nav>
             <nav className="footer-column" aria-label="Layanan Panboy"><h2>LAYANAN</h2><a href="/jasa-design">Jasa Design</a><a href="/handle-event">Handle Event</a><a href="/live-streaming">Live Streaming</a><a href="/pembayaran">Pembayaran Member</a></nav>
-            <div className="footer-column footer-contact"><h2>HUBUNGI KAMI</h2><a href="mailto:heruseptian52@gmail.com">heruseptian52@gmail.com</a><a href="https://wa.me/6281545910291" target="_blank" rel="noreferrer">WhatsApp: +62 815-4591-0291</a><p>Jl. Pembangunan RT 18, Makroman, Sambutan, Samarinda, Kalimantan Timur, Indonesia</p></div>
+            <div className="footer-column footer-contact"><h2>HUBUNGI KAMI</h2><a href="mailto:panboycommunity@gmail.com">panboycommunity@gmail.com</a><a href="https://wa.me/6281545910291" target="_blank" rel="noreferrer">WhatsApp: +62 815-4591-0291</a><p>Jl. Pembangunan RT 18, Makroman, Sambutan, Samarinda, Kalimantan Timur, Indonesia</p></div>
           </div>
           <div className="container footer-bottom"><span>© {new Date().getFullYear()} {s.brandName}. Semua hak dilindungi.</span><nav className="footer-legal" aria-label="Informasi legal"><a href="/kontak">Kontak</a><a href="/syarat-ketentuan">Syarat &amp; Ketentuan</a><a href="/kebijakan-pengembalian">Pengembalian Dana</a><a href="/faq">FAQ</a></nav></div>
         </footer>
