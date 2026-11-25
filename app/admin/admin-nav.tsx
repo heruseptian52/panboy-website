@@ -26,7 +26,7 @@ function iconFor(href: string): IconName {
   if (path.includes("topup")) return "topup";
   if (path.includes("toko")) return "shop";
   if (path.includes("fitur") || path.includes("tampilan")) return "settings";
-  if (path.includes("media")) return "media";
+  if (path.includes("media") || path.includes("showcase")) return "media";
   if (path.includes("analitik")) return "analytics";
   if (path.includes("audit")) return "audit";
   if (path.includes("akses")) return "admin";

@@ -35,3 +35,22 @@ test('video larger than edge limit uses small requests and multipart assembly',a
  const key=decodeURIComponent((await response.json()).url.slice('/api/images/'.length));
  assert.deepEqual(data.get(key).map(x=>x.byteLength),[6*1048576,6*1048576,2*1048576+5]);
 });
+test('showcase video validates signature and uses protected media prefix',async()=>{
+ const bytes=new Uint8Array(20);bytes.set([0,0,0,20,102,116,121,112],0);
+ const endpoint='/api/admin/upload-video?showcase=1&action=';
+ const begin=await post(video,endpoint+'init',JSON.stringify({name:'test.mp4',size:bytes.length,parts:1}),{'Content-Type':'application/json'});
+ assert.equal(begin.status,200);const {uploadId}=await begin.json();
+ assert.equal((await post(video,endpoint+'chunk&uploadId='+uploadId+'&index=0',new Uint8Array(20))).status,400);
+ assert.equal((await post(video,endpoint+'chunk&uploadId='+uploadId+'&index=0',bytes)).status,200);
+ const complete=await post(video,endpoint+'complete&uploadId='+uploadId);
+ assert.equal(complete.status,200);assert.match((await complete.json()).url,/^\/api\/images\/showcase-media%2F/);
+});
+test('showcase image chunk upload requires appearance and validates content into protected prefix',async()=>{
+ const route=load('../app/api/admin/showcase/upload/route.ts',{'cloudflare:workers':{env:{BUCKET:bucket}},'../../../../../lib/admin-auth':{requirePermission:async(r,p)=>p==='appearance'&&r.headers.get('x-admin')==='yes'},'../../../../../lib/uploaded-image':mocks['./uploaded-image'],'../../../../../lib/chunked-image':image});
+ const base='/api/admin/showcase/upload?action=',bytes=new Uint8Array(600000);bytes[0]=137;bytes[1]=80;
+ const body=JSON.stringify({size:bytes.length});
+ assert.equal((await post(route,base+'init',body,{'Content-Type':'application/json'})).status,403);
+ const headers={'x-admin':'yes'},init=await (await post(route,base+'init',body,{...headers,'Content-Type':'application/json'})).json();
+ for(let i=0;i<2;i++)assert.equal((await post(route,base+'chunk&uploadId='+init.uploadId+'&index='+i,bytes.slice(i*init.chunkSize,(i+1)*init.chunkSize),headers)).status,200);
+ const saved=await post(route,base+'complete&uploadId='+init.uploadId,null,headers);assert.equal(saved.status,200);assert.match((await saved.json()).url,/^\/api\/images\/showcase-media%2F/);
+});

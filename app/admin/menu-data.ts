@@ -60,6 +60,7 @@ export function menuGroups(a: AdminPermissions): MenuGroup[] {
         { href: "/admin/fitur", label: "Aktif / Nonaktif", description: "Atur menu dan fitur yang ditampilkan.", icon: "settings" },
         { href: "/admin/tampilan", label: "Tampilan", description: "Warna, tulisan, dan tampilan website.", icon: "template" },
         { href: "/admin/media", label: "Video, Foto & Musik", description: "Kelola media beranda.", icon: "media" },
+        { href: "/admin/showcase", label: "Panboy Showcase / Manajemen Iklan", description: "Promosi, sponsor, profil pengiklan, dan statistik.", icon: "media" },
       ] as MenuItem[] : []),
       ...(a.communityProfile ? [{ href: "/admin/community-profile", label: "Community Profile", description: "Ubah isi profil komunitas.", icon: "profile" } as MenuItem] : []),
       ...(a.analytics ? [{ href: "/admin/analitik", label: "Analitik", description: "Pantau aktivitas pengunjung.", icon: "analytics" } as MenuItem] : []),

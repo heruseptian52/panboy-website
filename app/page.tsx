@@ -20,6 +20,8 @@ import MemberHeroCarousel from "./member-hero-carousel";
 import { getHomeData } from "../lib/home-data";
 import PanboyIcon from "./panboy-icon";
 import SitePopup from "./site-popup";
+import {getPublicShowcases} from "../lib/showcase";
+import {ShowcaseSection} from "./showcase/showcase-view";
 export const dynamic = "force-dynamic";
 function ChatIcon() {
   return (
@@ -131,7 +133,7 @@ function EventGroups({
   );
 }
 export default async function Home() {
-  const { events, partners, settings: s, features: f, members } = await getHomeData(),
+  const [{ events, partners, settings: s, features: f, members },showcase] = await Promise.all([getHomeData(),getPublicShowcases()]),
     featuredEvents = events.filter((e) =>
       ["EVENT PANBOY", "EVENT PREMIUM"].includes(e.category.toUpperCase()),
     );
@@ -313,6 +315,7 @@ export default async function Home() {
           </section>
         )}
         {s.premiumAdPosition === "after_events" && premiumSection}
+        {!!showcase.ads.length&&<ShowcaseSection ads={showcase.ads} whatsapp={showcase.whatsapp}/>}
         <section className="container refresh-members" aria-labelledby="refresh-member-title"><div className="refresh-heading"><div><p className="eyebrow">MORE THAN JUST A TEAM</p><h2 id="refresh-member-title">Satu komunitas. Satu keluarga<span>.</span></h2><p>Mereka yang ikut membangun cerita Panboy Community.</p></div><a href="/member">Semua member ↗</a></div><div className="refresh-member-grid">{memberShowcase.map(m=><a href="/member" key={m.id}>{m.logoUrl?<img src={m.logoUrl} alt={m.teamName} loading="lazy" decoding="async"/>:<PanboyIcon name="member"/>}<b>{m.teamName}</b><small>Member komunitas · {m.membershipTier || "C"}</small></a>)}</div><div className="refresh-member-join"><PanboyIcon name="member"/><div><p className="eyebrow">TEMPAT UNTUK TIM KAMU</p><h3>Langkah besar dimulai dari kebersamaan.</h3><p>Kenali program dan benefit member Panboy Community.</p></div><a className="button gold" href="/member">Lihat benefit member ↗</a></div></section>
         <section className="container refresh-services"><div className="refresh-heading"><div><p className="eyebrow">LET’S MAKE IT HAPPEN</p><h2>Dari ide, jadi panggung nyata<span>.</span></h2><p>Semua kebutuhan tim dan event kamu, dikerjakan bersama Panboy.</p></div></div><div className="refresh-service-grid">{[{icon:"design" as const,title:"Design kreatif",text:"Logo, poster, leaderboard, dan identitas visual untuk tim serta event kamu.",href:"/jasa-design",tag:"VISUAL IDENTITY"},{icon:"handle" as const,title:"Handle event",text:"Pengelolaan turnamen, room esport, spected, dan hitung poin.",href:"/handle-event",tag:"TOURNAMENT MANAGEMENT"},{icon:"live" as const,title:"Live streaming",text:"Hadirkan setiap momen melalui siaran, observer, dan caster.",href:"/live-streaming",tag:"BROADCAST & CASTER"}].map((x,i)=><a href={x.href} key={x.title}><div><PanboyIcon name={x.icon}/><small>0{i+1}</small></div><p className="eyebrow">{x.tag}</p><h3>{x.title}</h3><p>{x.text}</p><span>Lihat layanan <b>↗</b></span></a>)}</div></section>
 

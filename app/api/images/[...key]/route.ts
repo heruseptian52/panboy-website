@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { requirePermission } from "../../../../lib/admin-auth";
+import {isShowcaseMediaPublic} from "../../../../lib/showcase";
 
 function mediaHeaders(type: string, etag?: string) {
   const headers = new Headers({
@@ -15,10 +16,11 @@ function mediaHeaders(type: string, etag?: string) {
 export async function GET(request: Request, { params }: { params: Promise<{ key: string[] }> }) {
   const { key } = await params;
   const objectKey = key.join("/");
-  const paymentProof = objectKey.startsWith("member-payment-proofs/");
+  const paymentProof = objectKey.startsWith("member-payment-proofs/"),showcaseMedia=objectKey.startsWith("showcase-media/");
+  if(showcaseMedia&&!await isShowcaseMediaPublic(objectKey)&&!await requirePermission(request,"appearance"))return new Response("Tidak ditemukan",{status:404,headers:{"Cache-Control":"private, no-store"}});
   if (paymentProof && !await requirePermission(request, "memberDues"))
     return new Response("Tidak ditemukan", { status: 404, headers: { "Cache-Control": "private, no-store" } });
-  if (objectKey.startsWith("roster-tmp/"))
+  if (objectKey.startsWith("roster-tmp/")||objectKey.startsWith("image-upload-temp/showcase-media/")||objectKey.startsWith("temp-showcase-video/"))
     return new Response("Tidak ditemukan", { status: 404, headers: { "Cache-Control": "no-store" } });
   const rangeHeader = request.headers.get("range");
   if (!rangeHeader) {
@@ -26,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ key:
     if (!object) return new Response("Tidak ditemukan", { status: 404 });
     const headers = mediaHeaders(object.httpMetadata?.contentType || "", object.etag);
     if(objectKey.startsWith("roster-logos/")&&!String(object.httpMetadata?.contentType||"").startsWith("image/"))headers.set("Content-Disposition","attachment");
-    if (paymentProof) headers.set("Cache-Control", "private, no-store");
+    if (paymentProof||showcaseMedia) headers.set("Cache-Control", "private, no-store");
     headers.set("Content-Length", String(object.size));
     return new Response(object.body, { headers });
   }
@@ -46,7 +48,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ key:
   if (!object) return new Response("Tidak ditemukan", { status: 404 });
   const headers = mediaHeaders(metadata.httpMetadata?.contentType || "", metadata.etag);
   if(objectKey.startsWith("roster-logos/")&&!String(metadata.httpMetadata?.contentType||"").startsWith("image/"))headers.set("Content-Disposition","attachment");
-  if (paymentProof) headers.set("Cache-Control", "private, no-store");
+  if (paymentProof||showcaseMedia) headers.set("Cache-Control", "private, no-store");
   headers.set("Content-Length", String(length));
   headers.set("Content-Range", `bytes ${start}-${end}/${metadata.size}`);
   return new Response(object.body, { status: 206, headers });
