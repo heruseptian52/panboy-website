@@ -6,11 +6,12 @@ import "../style.css";
 
 type Saved = {title:string; teamName:string; contactPhone:string; groupUrl:string; players:{nick:string;playerId:string}[]; zones:string[]; logoName:string; options:RosterOptions};
 export default function Success(){
-  const [saved,setSaved]=useState<Saved|null>(null),[editLink,setEditLink]=useState(""),[error,setError]=useState(""),[notice,setNotice]=useState("");
+  const [saved,setSaved]=useState<Saved|null>(null),[editLink,setEditLink]=useState(""),[error,setError]=useState(""),[notice,setNotice]=useState(""),[redirecting,setRedirecting]=useState(false);
   const whatsappOpened=useRef(false);
   useEffect(()=>{
     const params=new URLSearchParams(location.search);
     const event=params.get("event"), token=params.get("token");
+    setRedirecting(params.get("wa")==="1");
     if(!event||!token){setError("Tautan konfirmasi tidak tersedia.");return}
     const edit=new URL("/data-event",location.origin);
     edit.search=new URLSearchParams({event,token}).toString();
@@ -38,6 +39,7 @@ export default function Success(){
     try{await navigator.clipboard.writeText(value);setNotice(message)}
     catch{setNotice("Tekan lama pada teks di bawah lalu pilih Salin.")}
   }
+  if(redirecting&&!error)return <main className="roster-page"><section className="roster-panel roster-success" role="status"><div className="success-mark">✓</div><h1>BERHASIL</h1><p>Mohon ditunggu, Anda sedang diarahkan ke WhatsApp event...</p><progress className="roster-redirect-progress"/>{saved&&<a className="success-back" href={saved.groupUrl||teamWhatsAppUrl(saved.teamName)} rel="noreferrer">Buka WhatsApp jika belum dialihkan</a>}</section></main>;
   return <main className="roster-page"><header><a href="/">← BERANDA</a><strong>PANBOY COMMUNITY</strong><a href="/data-event">FORM DATA</a></header>
     <section className="roster-panel roster-success"><h1>{saved?"Data team berhasil disimpan":error||"Memuat data team…"}</h1>
     {saved&&<><p><strong>{saved.teamName}</strong> · {saved.title}</p>

@@ -18,8 +18,9 @@ test('pesan WhatsApp hanya nama team, termasuk karakter khusus, tanpa token edit
   assert.ok(!url.href.includes('editToken'));
 });
 test('hanya kirim data baru yang menandai auto WhatsApp setelah respons sukses',()=>{
-  assert.match(form,/if\(!response\.ok\)throw new Error\(result\.error\|\|"Gagal menyimpan"\);const params=/);
-  assert.match(form,/if\(!editToken\)params\.set\("wa","1"\)/);
+  assert.match(form,/if\(!response\.ok\)throw new Error\(result\.error\|\|"Gagal menyimpan"\);if\(!editToken\)/);
+  assert.match(form,/const target=result\.groupUrl\|\|teamWhatsAppUrl/);
+  assert.match(form,/setRedirectUrl\(target\);setTimeout\(\(\)=>location\.assign\(target\)/);
   assert.match(success,/new URLSearchParams\(location\.search\)\.get\("wa"\)!=="1"/);
   assert.match(success,/whatsappOpened\.current=true/);
   assert.match(success,/current\.searchParams\.delete\("wa"\)/);

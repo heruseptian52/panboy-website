@@ -105,3 +105,28 @@ test('hasil grup tersimpan; peserta baru tertunda sampai admin mengundi ulang',a
  saved=await (await post(drawRoute,'/api/admin/roster-events/draw',{eventId:id,groupCount:2})).json();
  assert.equal(saved.assignments.length,4);assert.equal(saved.pending.length,0);
 });
+
+test('admin menambah team dengan logo, mengedit nama/logo, dan tetap mematuhi slot',async()=>{
+ const db=env.DB.db;
+ db.exec("CREATE TABLE IF NOT EXISTS roster_uploads (token TEXT PRIMARY KEY,event_id INTEGER,object_key TEXT,file_name TEXT,ready INTEGER,consumed INTEGER,expires_at TEXT)");
+ const ev=db.prepare("INSERT INTO roster_events(title,deadline,max_players,options_json,max_slots,created_at,stopped) VALUES(?,?,?,?,?,?,?)").run("MANUAL TEST","2025-01-01",6,JSON.stringify(options),1,new Date().toISOString(),1);
+ const id=Number(ev.lastInsertRowid);
+ const upload=(token,eventId,key)=>db.prepare("INSERT INTO roster_uploads VALUES(?,?,?,?,1,0,?)").run(token,eventId,key,"logo.png","2099-01-01");
+ const put=body=>settingsRoute.PUT(new Request("http://localhost/api/admin/roster-events",{method:"PUT",body:JSON.stringify({id,...body})}));
+ upload("wrong",id+1,"wrong.png");
+ assert.equal((await put({action:"createEntry",teamName:"MANUAL",uploadToken:"wrong"})).status,400);
+ upload("first",id,"roster-logos/"+id+"/first.png");
+ const created=await put({action:"createEntry",teamName:"MANUAL",uploadToken:"first"});
+ assert.equal(created.status,200,await created.clone().text());
+ const entryId=(await created.json()).id;
+ assert.equal(db.prepare("SELECT consumed FROM roster_uploads WHERE token='first'").get().consumed,1);
+ assert.equal((await put({action:"createEntry",teamName:"FULL"})).status,409);
+ upload("second",id,"roster-logos/"+id+"/second.png");
+ const edited=await put({action:"entry",entryId,teamName:"MANUAL EDIT",uploadToken:"second"});
+ assert.equal(edited.status,200,await edited.clone().text());
+ const current=db.prepare("SELECT team_name,logo_key FROM roster_entries WHERE id=?").get(entryId);
+ assert.equal(current.team_name,"MANUAL EDIT");assert.equal(current.logo_key,"roster-logos/"+id+"/second.png");
+ assert.equal(db.prepare("SELECT COUNT(*) as n FROM roster_entries WHERE event_id=?").get(id).n,1);
+ assert.equal((await put({action:"entry",entryId,teamName:"RENAMED"})).status,200);
+ assert.equal(db.prepare("SELECT logo_key FROM roster_entries WHERE id=?").get(entryId).logo_key,current.logo_key);
+});

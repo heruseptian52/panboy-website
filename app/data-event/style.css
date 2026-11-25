@@ -7,3 +7,5 @@
 .roster-invite-note{padding:12px 14px;border:1px solid #ae8a42;border-radius:9px;color:#e6d3a0;background:#211b12}
 .roster-panel fieldset label+label{margin-top:10px}
 .roster-success textarea,.success-edit input{display:block;width:100%;box-sizing:border-box;padding:10px;margin:8px 0;background:#141315;color:#fff;border:1px solid #56472e;border-radius:6px}
+
+.roster-redirect-progress{display:block;width:100%;height:10px;accent-color:#d6aa53;margin:24px auto;border-radius:8px}

@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
+let rosterSchemaReady=false;
 export async function ensureRosterTables() {
+  if(rosterSchemaReady)return;
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS roster_events (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, deadline TEXT NOT NULL, stopped INTEGER NOT NULL DEFAULT 0, max_players INTEGER NOT NULL DEFAULT 8, created_at TEXT NOT NULL)").run();
   const columns = await env.DB.prepare("PRAGMA table_info(roster_events)").all<{name:string}>();
   if(!columns.results.some(column=>column.name==="max_players")){
@@ -36,6 +38,7 @@ export async function ensureRosterTables() {
   }
   await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_roster_entry_invitation ON roster_entries(invitation_id) WHERE invitation_id IS NOT NULL").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS roster_draws (event_id INTEGER PRIMARY KEY, group_count INTEGER NOT NULL, assignments_json TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
+  rosterSchemaReady=true;
 }
 export async function hashRosterToken(token: string) {
   const bytes = new TextEncoder().encode(token);

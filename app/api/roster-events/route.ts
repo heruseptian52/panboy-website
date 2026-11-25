@@ -9,7 +9,9 @@ function publicEvent(row: Record<string,unknown>) {
   return {...event,options};
 }
 export async function GET(request: Request) {
-  await ensureRosterTables();
+  try{return await readRoster(request)}catch(error){if(!/no such (table|column)/i.test(String(error)))throw error;await ensureRosterTables();return readRoster(request)}
+}
+async function readRoster(request:Request){
   const params = new URL(request.url).searchParams;
   const id = Number(params.get("id"));
   if (!id) {
@@ -101,6 +103,6 @@ export async function POST(request: Request) {
     if(upload){await env.DB.prepare("UPDATE roster_uploads SET consumed=1 WHERE token=?").bind(uploadToken).run();
     const status=await syncRosterLogo(upload.objectKey,upload.fileName,event.driveFolderUrl,teamName);
     await env.DB.prepare("UPDATE roster_entries SET drive_status=?,drive_file_id=? WHERE id=?").bind(status.status,status.fileId,id).run();}
-    return Response.json({ok:true,id,editToken:newToken});
+    return Response.json({ok:true,id,editToken:newToken,groupUrl:options.groupUrl,teamName:invite?.teamName??teamName});
   }catch{return Response.json({error:"Nama team sudah terdaftar atau data gagal disimpan. Coba lagi."},{status:409})}
 }

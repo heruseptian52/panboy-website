@@ -1,6 +1,7 @@
 import {env} from "cloudflare:workers";
 import {detectUploadedImage} from "../../../../lib/uploaded-image";
 import {ensureRosterTables,hashRosterToken,resolveRosterHash} from "../../../../lib/event-rosters";
+import {requirePermission} from "../../../../lib/admin-auth";
 import {readOptions} from "../../../../lib/roster-options";
 const CHUNK_SIZE=256*1024,MAX_SIZE=5*1024*1024;
 type Upload={objectKey:string;fileName:string;sizeBytes:number;ready:number;consumed:number;expiresAt:string};
@@ -22,11 +23,13 @@ async function canInitUpload(eventId:number,inviteToken:unknown,editToken:unknow
 }
 async function getUpload(token:string,eventId:number){return env.DB.prepare("SELECT object_key AS objectKey,file_name AS fileName,size_bytes AS sizeBytes,ready,consumed,expires_at AS expiresAt FROM roster_uploads WHERE token=? AND event_id=?").bind(token,eventId).first<Upload>()}
 export async function POST(request:Request){
-  const stage=new URL(request.url).searchParams.get("stage");
+  const params=new URL(request.url).searchParams,stage=params.get("stage"),admin=params.get("admin")==="1";
+  if(admin&&!await requirePermission(request,"events"))return error("Tidak diizinkan.",403);
+  async function adminEvent(id:number){return Number.isSafeInteger(id)&&id>0&&!!await env.DB.prepare("SELECT id FROM roster_events WHERE id=?").bind(id).first()}
   if(stage==="init"){
     let body:{eventId?:number;fileName?:string;size?:number;inviteToken?:string;editToken?:string};try{body=await request.json();if(!body||typeof body!=="object")throw new Error()}catch{return error("Data file tidak valid.")}
     const eventId=Number(body.eventId),size=Number(body.size),fileName=String(body.fileName||"").slice(0,150);
-    if(!await canInitUpload(eventId,body.inviteToken,body.editToken))return error("Upload logo tidak tersedia untuk tautan ini.",403);
+    if(!(admin?await adminEvent(eventId):await canInitUpload(eventId,body.inviteToken,body.editToken)))return error("Upload logo tidak tersedia untuk tautan ini.",403);
     if(!Number.isInteger(size)||size<1||size>MAX_SIZE)return error("Ukuran file maksimal 5 MB.");
     if(!fileName)return error("Pilih file logo.");
     const token=crypto.randomUUID(),key=`roster-tmp/${eventId}/${token}`,expires=new Date(Date.now()+30*60000).toISOString();
@@ -34,7 +37,7 @@ export async function POST(request:Request){
     return Response.json({token,chunkSize:CHUNK_SIZE});
   }
   const token=request.headers.get("x-upload-token")||"",eventId=Number(request.headers.get("x-event-id"));
-  if(!token||!await activeEvent(eventId))return error("Upload tidak tersedia untuk event ini.",403);
+  if(!token||!(admin?await adminEvent(eventId):await activeEvent(eventId)))return error("Upload tidak tersedia untuk event ini.",403);
   const upload=await getUpload(token,eventId);
   if(!upload||upload.consumed||Date.now()>=Date.parse(upload.expiresAt))return error("Sesi upload kedaluwarsa. Pilih file lagi.",403);
   const parts=Math.ceil(upload.sizeBytes/CHUNK_SIZE);
