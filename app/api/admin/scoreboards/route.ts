@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
 import { requireAnyPermission } from "../../../../lib/admin-auth";
+import {readTemplateCatalog} from "../../../../lib/leaderboard-catalog";
+import {roleDefault,stylePreset} from "../../../../lib/leaderboard-style";
 import { audit } from "../../../../lib/audit";
 import {
   DEFAULT_PLACEMENT,
@@ -133,10 +135,11 @@ export async function POST(r: Request) {
         { error: "Nama, mode, dan peserta wajib diisi" },
         { status: 400 },
       );
+    const styleId=roleDefault(await readTemplateCatalog(),a.isOwner),initialLayout=styleId==="original"?{}:{styleId,design:stylePreset(styleId).design,backgroundMode:"transparent",followMaster:true};
     const x = await env.DB.prepare(
-        "INSERT INTO scoreboards(name,mode,point_system_id,owner_email,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+        "INSERT INTO scoreboards(name,mode,point_system_id,owner_email,created_at,updated_at,layout_json) VALUES(?,?,?,?,?,?,?)",
       )
-        .bind(name, mode, Number(b.pointSystemId) || null, a.email, now, now)
+        .bind(name, mode, Number(b.pointSystemId) || null, a.email, now, now,JSON.stringify(initialLayout))
         .run(),
       id = Number(x.meta.last_row_id);
     await env.DB.batch(

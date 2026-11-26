@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
 import { requirePermission } from "../../../../lib/admin-auth";
+import {readTemplateCatalog} from "../../../../lib/leaderboard-catalog";
+import {canChooseStyle,isStyleId,sanitizeDesign} from "../../../../lib/leaderboard-style";
 import { audit } from "../../../../lib/audit";
 import {
   baseTemplate,
@@ -83,7 +85,7 @@ export async function GET(r: Request) {
   const
     [teams, totals] = await Promise.all([
       env.DB.prepare(
-        "SELECT id,slot_number AS slotNumber,name,logo_url AS logoUrl FROM scoreboard_teams WHERE scoreboard_id=? ORDER BY slot_number",
+        "SELECT id,slot_number AS slotNumber,name,short_name AS shortName,logo_url AS logoUrl FROM scoreboard_teams WHERE scoreboard_id=? ORDER BY slot_number",
       )
         .bind(id)
         .all(),
@@ -115,6 +117,8 @@ export async function GET(r: Request) {
       winnerHidden,
       activeMatch,
       rankingTieBreak: pointRule.tieBreak,
+      eliminationPoint:pointRule.eliminationPoint,
+      boardStyle:JSON.parse(String(b.layout_json||"{}")),
     },
   });
 }
@@ -130,24 +134,41 @@ export async function PUT(r: Request) {
       { status: 404 },
     );
   const current = await ensure(id);
+  if(body.action==="setBoardStyle"){
+    const l=JSON.parse(String(b.layout_json||"{}")),existing=isStyleId(l.styleId)?l.styleId:"original",styleId=body.styleId;
+    if(!canChooseStyle(await readTemplateCatalog(),a.isOwner,styleId,existing))return Response.json({error:"Template disembunyikan."},{status:403});
+    const design=body.design||styleId!=="original"?sanitizeDesign(body.design,styleId):undefined,next={...l,styleId,design,...(styleId!=="original"?{concept:undefined,backgroundMode:"transparent"}:{})};
+    await env.DB.prepare("UPDATE scoreboards SET layout_json=?,updated_at=? WHERE id=?").bind(JSON.stringify(next),new Date().toISOString(),id).run();
+    return Response.json({ok:true,boardStyle:next});
+  }
+  if(body.action==="updateConfig"){
+    const templates=(Array.isArray(body.templates)?body.templates:defaultTemplates).slice(0,20).map((x:any)=>cleanTemplate(x,baseTemplate));
+    if(!templates.length)return Response.json({error:"Minimal satu template."},{status:400});
+    const active=templates.some((x:any)=>x.id===body.activeTemplateId)?String(body.activeTemplateId):templates[0].id;
+    const limit=["8","10","16","all"].includes(String(body.displayLimit))?String(body.displayLimit):"all";
+    await env.DB.prepare("UPDATE live_leaderboard_configs SET active_template_id=?,templates_json=?,display_limit=?,side=?,show_legend=?,updated_at=? WHERE scoreboard_id=?").bind(active,JSON.stringify(templates),limit,body.side==="left"?"left":"right",body.showLegend===false?0:1,new Date().toISOString(),id).run();
+    return Response.json({ok:true});
+  }
   if(body.action === "updateTeamState"){
     const teamId=Number(body.teamId),known=await env.DB.prepare("SELECT id FROM scoreboard_teams WHERE scoreboard_id=? AND id=?").bind(id,teamId).first<{id:number}>();
     if(!known)return Response.json({error:"Team tidak ditemukan."},{status:404});
     const oldState=stateClean(JSON.parse(String(current.state_json||"{}"))),oldTeam=oldState[String(teamId)]||freshState(),cleaned=stateClean({[teamId]:{...oldTeam,players:body.players}})[String(teamId)]||oldTeam,nextState={...oldState,[teamId]:cleaned},wasAlive=oldTeam.players.some(x=>x!=="eliminated"),isAlive=cleaned.players.some(x=>x!=="eliminated"),epoch=Number(current.match_epoch),events=JSON.parse(String(current.elimination_events_json||"[]")) as any[];
+    if(wasAlive===isAlive){const now=new Date().toISOString();await env.DB.prepare("UPDATE live_leaderboard_configs SET state_json=json_set(CASE WHEN json_valid(state_json) THEN state_json ELSE '{}' END,?,json(?)),updated_at=? WHERE scoreboard_id=?").bind('$."'+teamId+'"',JSON.stringify(cleaned),now,id).run();await audit(a.email,"live_team_state","scoreboard",id,`${teamId}:${cleaned.players.join(",")}`);return Response.json({ok:true,teamId,players:cleaned.players,updatedAt:now})}
     let activeId=Number(b.active_match_id||0);if(!activeId){const latest=await env.DB.prepare("SELECT id FROM scoreboard_matches WHERE scoreboard_id=? ORDER BY match_number DESC,id DESC LIMIT 1").bind(id).first<{id:number}>();activeId=Number(latest?.id||0)}
     const teamIds=(await env.DB.prepare("SELECT id FROM scoreboard_teams WHERE scoreboard_id=?").bind(id).all<{id:number}>()).results,remainingBefore=teamIds.filter(x=>(oldState[String(x.id)]||freshState()).players.some(player=>player!=="eliminated")).length;
     if(wasAlive&&!isAlive)events.push({id:`${epoch}-${teamId}-${Date.now()}-${events.length}`,teamId,placement:remainingBefore,epoch,at:Date.now()});
     const now=new Date().toISOString(),kept=events.slice(-50);
-    await env.DB.prepare("UPDATE live_leaderboard_configs SET state_json=?,elimination_events_json=?,updated_at=? WHERE scoreboard_id=?").bind(JSON.stringify(nextState),JSON.stringify(kept),now,id).run();
-    let winnerResult:Record<string,unknown>|null=null;
+
+    let winnerResult:Record<string,unknown>|null=null,teamResult:Record<string,unknown>|null=null;
     if(activeId&&wasAlive!==isAlive){
       const rule=await ruleForScoreboard(id),saved=await latestScoreboardResult(activeId,teamId),eliminations=Number(saved?.eliminations||0),placement=isAlive?0:remainingBefore,calculated=score(rule,placement,eliminations);
-      await saveScoreboardResult({matchId:activeId,teamId,placement,eliminations,placementPoints:calculated.placementPoints,totalPoints:calculated.totalPoints,calculationMode:"auto",manualPoints:null,updatedAt:now});
+      await saveScoreboardResult({matchId:activeId,teamId,placement,eliminations,placementPoints:calculated.placementPoints,totalPoints:calculated.totalPoints,calculationMode:"auto",manualPoints:null,updatedAt:now});teamResult={matchId:activeId,teamId,placement,eliminations,placementPoints:calculated.placementPoints,totalPoints:calculated.totalPoints,calculationMode:"auto",manualPoints:null};
       const remainingAfter=teamIds.filter(x=>(nextState[String(x.id)]||freshState()).players.some(player=>player!=="eliminated")).length;
       if(remainingAfter===1){const winner=teamIds.find(x=>(nextState[String(x.id)]||freshState()).players.some(player=>player!=="eliminated"));if(winner){const winnerSaved=await latestScoreboardResult(activeId,winner.id),winnerElims=Number(winnerSaved?.eliminations||0),winnerScore=score(rule,1,winnerElims);await saveScoreboardResult({matchId:activeId,teamId:winner.id,placement:1,eliminations:winnerElims,placementPoints:winnerScore.placementPoints,totalPoints:winnerScore.totalPoints,calculationMode:"auto",manualPoints:null,updatedAt:now});winnerResult={matchId:activeId,teamId:winner.id,placement:1,eliminations:winnerElims,placementPoints:winnerScore.placementPoints,totalPoints:winnerScore.totalPoints,calculationMode:"auto",manualPoints:null}}}
     }
+    await env.DB.prepare("UPDATE live_leaderboard_configs SET state_json=json_set(CASE WHEN json_valid(state_json) THEN state_json ELSE '{}' END,?,json(?)),elimination_events_json=?,updated_at=? WHERE scoreboard_id=?").bind('$."'+teamId+'"',JSON.stringify(cleaned),JSON.stringify(kept),now,id).run();
     await audit(a.email,"live_team_state","scoreboard",id,`${teamId}:${cleaned.players.join(",")}`);
-    return Response.json({ok:true,teamId,players:cleaned.players,winnerResult,updatedAt:now});
+    return Response.json({ok:true,teamId,players:cleaned.players,winnerResult,teamResult,placementChanged:true,updatedAt:now});
   }
   if(body.action === "adjustScore"){
     let activeId=Number(b.active_match_id||0);
@@ -156,12 +177,13 @@ export async function PUT(r: Request) {
     if(body.field!=="elims")return Response.json({error:"PTS dihitung otomatis dari Kill + Placement. Edit Kill atau Placement untuk mengoreksi PTS."},{status:400});
     const teamId=Number(body.teamId),rawDelta=Math.trunc(Number(body.delta)||0),delta=Math.max(-99,Math.min(99,rawDelta));
     if(!teamId||!delta)return Response.json({error:"Perubahan eliminasi tidak valid."},{status:400});
+    if(!await env.DB.prepare("SELECT id FROM scoreboard_teams WHERE id=? AND scoreboard_id=?").bind(teamId,id).first())return Response.json({error:"Team tidak ditemukan."},{status:404});
     const existing=await latestScoreboardResult(activeId,teamId),placement=Number(existing?.placement||0),oldElims=Number(existing?.eliminations||0),rule=await ruleForScoreboard(id);
     const eliminations=Math.max(0,oldElims+delta),mode="auto",manualPoints=null;
     const calculated=score(rule,placement,eliminations),now=new Date().toISOString();
     await saveScoreboardResult({matchId:activeId,teamId,placement,eliminations,placementPoints:calculated.placementPoints,totalPoints:calculated.totalPoints,calculationMode:mode,manualPoints,updatedAt:now});
-    const activeMatch=await env.DB.prepare("SELECT match_number AS matchNumber FROM scoreboard_matches WHERE id=? AND scoreboard_id=?").bind(activeId,id).first<{matchNumber:number}>(),activeNumber=Number(activeMatch?.matchNumber||0),aggregate=await env.DB.prepare(`${latestScoreboardResultsCte} SELECT sr.team_id AS teamId,SUM(CASE WHEN sm.match_number<=? THEN CASE WHEN sr.calculation_mode='manual' AND sr.manual_points IS NOT NULL THEN sr.manual_points ELSE sr.total_points END ELSE 0 END) AS points,MAX(CASE WHEN sm.id=? THEN sr.eliminations ELSE 0 END) AS elims,MAX(CASE WHEN sm.id=? THEN sr.placement_points ELSE 0 END) AS activePlacementPoints,SUM(CASE WHEN sm.match_number<=? THEN sr.eliminations ELSE 0 END) AS overallElims FROM latest_results sr JOIN scoreboard_matches sm ON sm.id=sr.match_id WHERE sm.scoreboard_id=? AND sr.team_id=? GROUP BY sr.team_id`).bind(activeNumber,activeId,activeId,activeNumber,id,teamId).first<Record<string,unknown>>();
-    const liveState=stateClean(JSON.parse(String(current.state_json||"{}"))),teamState=liveState[String(teamId)]||freshState(),isAlive=teamState.players.some(player=>player!=="eliminated"),team={...aggregate,teamId,points:visibleLivePoints(Number(aggregate?.points||0),Number(aggregate?.activePlacementPoints||0),isAlive),elims:Number(aggregate?.elims||0),overallElims:Number(aggregate?.overallElims||0)};
+    const activeMatch=await env.DB.prepare("SELECT match_number AS matchNumber FROM scoreboard_matches WHERE id=? AND scoreboard_id=?").bind(activeId,id).first<{matchNumber:number}>(),activeNumber=Number(activeMatch?.matchNumber||0),aggregate=await env.DB.prepare(`${latestScoreboardResultsCte} SELECT sr.team_id AS teamId,SUM(CASE WHEN sm.match_number<=? THEN CASE WHEN sr.calculation_mode='manual' AND sr.manual_points IS NOT NULL THEN sr.manual_points ELSE sr.total_points END ELSE 0 END) AS points,MAX(CASE WHEN sm.id=? THEN sr.eliminations ELSE 0 END) AS elims,MAX(CASE WHEN sm.id=? THEN sr.placement_points ELSE 0 END) AS activePlacementPoints,MAX(CASE WHEN sm.id=? THEN sr.placement ELSE 0 END) AS activePlacement,SUM(CASE WHEN sm.match_number<=? THEN sr.eliminations ELSE 0 END) AS overallElims FROM latest_results sr JOIN scoreboard_matches sm ON sm.id=sr.match_id WHERE sm.scoreboard_id=? AND sr.team_id=? GROUP BY sr.team_id`).bind(activeNumber,activeId,activeId,activeId,activeNumber,id,teamId).first<Record<string,unknown>>();
+    const liveState=stateClean(JSON.parse(String(current.state_json||"{}"))),teamState=liveState[String(teamId)]||freshState(),isAlive=teamState.players.some(player=>player!=="eliminated"),team={...aggregate,teamId,points:visibleLivePoints(Number(aggregate?.points||0),Number(aggregate?.activePlacementPoints||0),isAlive,Number(aggregate?.activePlacement||0)),elims:Number(aggregate?.elims||0),overallElims:Number(aggregate?.overallElims||0)};
     return Response.json({ok:true,team});
   }
   if(body.action === "nextMatch"){

@@ -2,6 +2,8 @@ import { env } from "cloudflare:workers";
 import { requirePermission } from "../../../../lib/admin-auth";
 import { audit } from "../../../../lib/audit";
 import { preserveLockedLeaderboard } from "../../../../lib/master-layout";
+import {readTemplateCatalog} from "../../../../lib/leaderboard-catalog";
+import {canChooseStyle,isStyleId,sanitizeDesign} from "../../../../lib/leaderboard-style";
 import type { Layout } from "../../../../lib/leaderboard-render";
 import { latestScoreboardResultsCte } from "../../../../lib/scoreboard-result-store";
 
@@ -37,6 +39,9 @@ export async function POST(request: Request) {
   const body = await request.json() as Record<string, unknown>, id = Number(body.id), board = await allowed(id, admin.email, admin.isOwner);
   if (!board) return Response.json({ error: "Leaderboard tidak ditemukan" }, { status: 404 });
   const current = JSON.parse(String(board.layout_json || "{}")) as Layout, requested = typeof body.layout === "object" && body.layout ? body.layout as Layout : {}, layout = preserveLockedLeaderboard(requested, current), width = Math.min(6000, Math.max(320, Number(body.canvasWidth) || 1920)), height = Math.min(6000, Math.max(320, Number(body.canvasHeight) || 1080));
+  const existingStyle=isStyleId(current.styleId)?current.styleId:"original",chosen=layout.styleId??existingStyle;
+  if(!canChooseStyle(await readTemplateCatalog(),admin.isOwner,chosen,existingStyle))return Response.json({error:"Template ini disembunyikan untuk akses Anda."},{status:403});
+  if(layout.styleId||current.styleId){if(!requested.styleId&&current.design)layout.design=current.design;layout.styleId=chosen;if(layout.design||chosen!=="original")layout.design=sanitizeDesign(layout.design,chosen)}
   await env.DB.prepare("UPDATE scoreboards SET template_url=?,canvas_width=?,canvas_height=?,layout_json=?,updated_at=? WHERE id=?")
     .bind(clean(body.templateUrl), width, height, JSON.stringify(layout).slice(0, 20000), new Date().toISOString(), id).run();
   await audit(admin.email, "leaderboard_template_edit", "scoreboard", id, `Template ${width}x${height}`);

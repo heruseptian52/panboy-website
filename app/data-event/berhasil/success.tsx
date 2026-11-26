@@ -1,4 +1,5 @@
 "use client";
+import {shortLink} from "../../../lib/short-link-client";
 import {useEffect,useRef,useState} from "react";
 import type {RosterOptions} from "../../../lib/roster-options";
 import {teamWhatsAppUrl} from "../../../lib/roster-whatsapp";
@@ -15,7 +16,7 @@ export default function Success(){
     if(!event||!token){setError("Tautan konfirmasi tidak tersedia.");return}
     const edit=new URL("/data-event",location.origin);
     edit.search=new URLSearchParams({event,token}).toString();
-    setEditLink(edit.href);
+    setEditLink(edit.href);void shortLink(edit.href).then(setEditLink);
     fetch("/api/roster-events?"+new URLSearchParams({id:event,token}),{cache:"no-store"})
       .then(async r=>{const data=await r.json();if(!r.ok)throw new Error(data.error);setSaved(data)})
       .catch(e=>setError(e.message||"Data gagal dimuat. Muat ulang halaman."));
@@ -36,7 +37,7 @@ export default function Success(){
     ...(saved.options.logoEnabled&&saved.logoName?["Logo: "+saved.logoName]:[])
   ].join("\n") : "";
   async function copy(value:string,message:string){
-    try{await navigator.clipboard.writeText(value);setNotice(message)}
+    try{await navigator.clipboard.writeText(await shortLink(value));setNotice(message)}
     catch{setNotice("Tekan lama pada teks di bawah lalu pilih Salin.")}
   }
   if(redirecting&&!error)return <main className="roster-page"><section className="roster-panel roster-success" role="status"><div className="success-mark">✓</div><h1>BERHASIL</h1><p>Mohon ditunggu, Anda sedang diarahkan ke WhatsApp event...</p><progress className="roster-redirect-progress"/>{saved&&<a className="success-back" href={saved.groupUrl||teamWhatsAppUrl(saved.teamName)} rel="noreferrer">Buka WhatsApp jika belum dialihkan</a>}</section></main>;

@@ -1,4 +1,7 @@
 "use client";
+import {shortLink,copyShortLink} from "../../../lib/short-link-client";
+import {StyleControls} from "../kelola-template-leaderboard/style-controls";
+import type {StyleId,BoardStyle} from "../../../lib/leaderboard-style";
 import { useEffect, useMemo, useRef, useState } from "react";
 import LiveLeaderboardPanel, {
   type LiveRow,
@@ -28,21 +31,25 @@ export default function LiveLeaderboardAdmin() {
     [busy, setBusy] = useState(false),
     [msg, setMsg] = useState(""),
     [previewScale, setPreviewScale] = useState(1),
+    [shortObs,setShortObs]=useState(""),
     saveQueue = useRef(Promise.resolve()),
-    scoreQueue = useRef(Promise.resolve()),
+    scoreQueue = saveQueue,
     autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     scoreSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     pendingScoreDeltas = useRef(new Map<number, number>()),
     realtimeSequence = useRef(0),
     dataRef = useRef<any>(null),
+    boardRef=useRef(0),
+    styleTimer=useRef<ReturnType<typeof setTimeout>|null>(null),
+    pendingStyle=useRef<{styleId:StyleId;design?:BoardStyle;id:number}|null>(null),
+    latestScoreSequence=useRef(new Map<number,number>()),
     previewRef = useRef<HTMLDivElement | null>(null);
+  const channelRef=useRef<BroadcastChannel|null>(null);
+  useEffect(()=>{setShortObs("");const token=data?.config?.overlayToken;if(!token)return;let mounted=true;void shortLink(location.origin+"/overlay/live-leaderboard/"+token).then(url=>{if(mounted)setShortObs(url)});if(typeof BroadcastChannel!=="undefined")channelRef.current=new BroadcastChannel(`panboy-live-${token}`);return()=>{mounted=false;channelRef.current?.close();channelRef.current=null}},[data?.config?.overlayToken]);
   function broadcastTeam(teamId:number,patch:Record<string,unknown>){
-    const token=String(dataRef.current?.config?.overlayToken||"");
-    if(!token||typeof BroadcastChannel==="undefined")return;
-    const channel=new BroadcastChannel(`panboy-live-${token}`);
-    channel.postMessage({type:"team-patch",teamId,patch,sequence:Date.now()*1000+(++realtimeSequence.current)});
-    channel.close();
+    const sequence=Date.now()*1000+(++realtimeSequence.current);channelRef.current?.postMessage({type:"team-patch",teamId,patch,sequence});return sequence;
   }
+  function refreshOverlay(teamId?:number,sequence?:number){channelRef.current?.postMessage({type:"refresh",teamId,sequence})}
   useEffect(()=>{dataRef.current=data},[data]);
   useEffect(() => {
     fetch("/api/admin/scoreboards")
@@ -55,26 +62,18 @@ export default function LiveLeaderboardAdmin() {
   }, []);
   useEffect(() => {
     if (!boardId) return;
-    setData(null);
+    boardRef.current=boardId;setData(null);dataRef.current=null;
     void loadBoard(boardId);
   }, [boardId]);
-  function chooseBoard(id:number){setBoardId(id);const url=new URL(location.href);url.searchParams.set("board",String(id));history.replaceState(history.state,"",url)}
-  async function loadBoard(id=boardId) {
-    Promise.all([
-      fetch(`/api/admin/live-leaderboard?id=${id}`, {
-        cache: "no-store",
-      }).then((r) => r.json()),
-      fetch(`/api/admin/scoreboard-teams?id=${id}`, {
-        cache: "no-store",
-      }).then((r) => r.json()),
-    ]).then(([live, teams]) =>
-      setData({ ...live, teams: teams.teams || live.teams }),
-    );
+  function chooseBoard(id:number){flushStyle();flushScoresNow();if(autoSaveTimer.current){clearTimeout(autoSaveTimer.current);autoSaveTimer.current=null;if(dataRef.current)persistLive(dataRef.current.config)}setBoardId(id);const url=new URL(location.href);url.searchParams.set("board",String(id));history.replaceState(history.state,"",url)}
+  async function loadBoard(id=boardId,sequence?:number){
+    try{const r=await fetch(`/api/admin/live-leaderboard?id=${id}`,{cache:"no-store"}),live=await r.json();if(boardRef.current!==id||(sequence!==undefined&&sequence!==realtimeSequence.current))return;if(!r.ok||!live.board||!live.config)throw Error(live.error||"Gagal memuat leaderboard.");dataRef.current=live;setData(live)}catch(e){setMsg((e as Error).message)}
   }
   useEffect(
     () => () => {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
       if (scoreSaveTimer.current) clearTimeout(scoreSaveTimer.current);
+      if(styleTimer.current)clearTimeout(styleTimer.current);
     },
     [],
   );
@@ -86,7 +85,7 @@ export default function LiveLeaderboardAdmin() {
     update();
     observer.observe(element);
     return () => observer.disconnect();
-  }, [data]);
+  }, [Boolean(data)]);
   const templates: LiveTemplate[] = (data?.config.templates || []).map(
       (x: Partial<LiveTemplate>) => cleanTemplate(x, baseTemplate),
     ),
@@ -122,8 +121,6 @@ export default function LiveLeaderboardAdmin() {
       })
       .sort((a, b) => compareLiveTeams(a,b,data.config.rankingTieBreak||[]))
       .map((r, i) => ({ ...r, rank: i + 1 }));
-    if (data.config.displayLimit !== "all")
-      x = x.slice(0, Number(data.config.displayLimit));
     return x;
   }, [data, state]);
   function persistLive(configData: any) {
@@ -132,10 +129,10 @@ export default function LiveLeaderboardAdmin() {
         fetch("/api/admin/live-leaderboard", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: boardId, ...configData }),
-        }).then(() => undefined),
+          body: JSON.stringify({ id: boardId, ...configData,action:"updateConfig" }),
+        }).then(async r=>{if(!r.ok)throw Error((await r.json()).error||"Gagal menyimpan template.");refreshOverlay()}),
       )
-      .catch(() => undefined);
+      .catch(e=>setMsg(e.message));
   }
   function schedulePreview(configData: any) {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
@@ -144,13 +141,7 @@ export default function LiveLeaderboardAdmin() {
       autoSaveTimer.current = null;
     }, 120);
   }
-  function config(p: any, autoSave = true) {
-    setData((d: any) => {
-      const next = { ...d, config: { ...d.config, ...p } };
-      if (autoSave) schedulePreview(next.config);
-      return next;
-    });
-  }
+  function config(p:any,autoSave=true){const d=dataRef.current;if(!d)return;const next={...d,config:{...d.config,...p}};dataRef.current=next;setData(next);if(autoSave)schedulePreview(next.config)}
   function setTemplate(p: Partial<LiveTemplate>) {
     config({
       templates: templates.map((x) =>
@@ -159,25 +150,21 @@ export default function LiveLeaderboardAdmin() {
     });
   }
   function teamState(id: number, p: Partial<TeamLiveState>) {
-    const current=dataRef.current;
+    flushScoresNow();const current=dataRef.current;
     if(!current)return;
     const currentState:Record<string,TeamLiveState>=current.config?.state||{};
     const nextState = {
         ...currentState,
         [id]: { ...(currentState[id] || freshState()), ...p },
       };
-    if (autoSaveTimer.current) {
-      clearTimeout(autoSaveTimer.current);
-      autoSaveTimer.current = null;
-    }
     const nextData={...current,config:{...current.config,state:nextState}};
     dataRef.current=nextData;
     setData(nextData);
-    broadcastTeam(id,{players:nextState[id].players});
+    const sequence=broadcastTeam(id,{players:nextState[id].players});
     saveQueue.current=saveQueue.current.then(()=>fetch("/api/admin/live-leaderboard",{
       method:"PUT",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({id:boardId,action:"updateTeamState",teamId:id,players:nextState[id].players}),
-    }).then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||"Gagal memperbarui status team.");if(result.winnerResult&&typeof BroadcastChannel!=="undefined"){const channel=new BroadcastChannel(`panboy-scoreboard-${boardId}`);channel.postMessage({type:"result",result:result.winnerResult,sequence:Date.now()});channel.close()}})).catch(error=>{setMsg(error instanceof Error?error.message:"Gagal memperbarui status team.");void loadBoard()});
+    }).then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||"Gagal memperbarui status team.");if(boardRef.current===boardId){refreshOverlay(id,sequence);if(result.placementChanged)setTimeout(()=>{const queued=saveQueue.current;void queued.then(()=>{if(boardRef.current===boardId)void loadBoard(boardId,realtimeSequence.current)})},80)}if(typeof BroadcastChannel!=="undefined"&&(result.winnerResult||result.teamResult)){const channel=new BroadcastChannel(`panboy-scoreboard-${boardId}`);for(const item of [result.teamResult,result.winnerResult])if(item)channel.postMessage({type:"result",result:item,sequence:Date.now()});channel.close()}})).catch(error=>{setMsg(error instanceof Error?error.message:"Gagal memperbarui status team.");refreshOverlay(id,sequence);void loadBoard(boardId)});
   }
   function quick(id: number, n: number) {
     const s = dataRef.current?.config?.state?.[id] || freshState();
@@ -193,19 +180,8 @@ export default function LiveLeaderboardAdmin() {
     p[index]=statuses[(statuses.indexOf(status)+1)%3];
     teamState(id,{players:p});
   }
-  async function save() {
-    setBusy(true);
-    const r = await fetch("/api/admin/live-leaderboard", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: boardId, ...data.config }),
-    });
-    setBusy(false);
-    setMsg(
-      r.ok
-        ? "LIVE LEADERBOARD TERSIMPAN & OBS DIPERBARUI."
-        : "GAGAL MENYIMPAN.",
-    );
+  async function save(){
+    setBusy(true);try{flushStyle();if(autoSaveTimer.current){clearTimeout(autoSaveTimer.current);autoSaveTimer.current=null}flushScoresNow();await saveQueue.current;const current=dataRef.current;if(!current)return;const r=await fetch("/api/admin/live-leaderboard",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:boardId,...current.config,action:"updateConfig"})});if(!r.ok)throw Error((await r.json()).error||"Gagal menyimpan.");refreshOverlay();setMsg("LIVE LEADERBOARD TERSIMPAN & OBS DIPERBARUI.")}catch(e){setMsg((e as Error).message||"GAGAL MENYIMPAN.")}finally{setBusy(false)}
   }
   function duplicate() {
     const id = `custom-${Date.now()}`,
@@ -233,15 +209,15 @@ export default function LiveLeaderboardAdmin() {
       const fresh = Object.fromEntries(
         (data.teams as Team[]).map((team) => [team.id, freshState()]),
       );
-      config({ state: fresh, winnerHidden: false }, false);
+      config({ state: fresh, winnerHidden: false }, false);refreshOverlay();await loadBoard();
       setMsg("MATCH BARU DIMULAI. STATUS ELIMINASI SUDAH DIRESET.");
     } else setMsg("GAGAL RESET MATCH.");
     setBusy(false);
   }
-  async function nextMatch(){if(!confirm("Selesaikan match aktif dan mulai match berikutnya? PTS tetap, ELIMS dan ALIVE kembali ke awal."))return;setBusy(true);flushScoresNow();await Promise.all([saveQueue.current,scoreQueue.current]);const r=await fetch("/api/admin/live-leaderboard",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:boardId,action:"nextMatch"})}),x=await r.json();if(r.ok){await loadBoard();setMsg(`MATCH ${x.matchNumber} DIMULAI. PTS DIBAWA, ELIMS DIRESET 0.`)}else setMsg(x.error||"GAGAL MEMULAI MATCH BERIKUTNYA.");setBusy(false)}
+  async function nextMatch(){if(!confirm("Selesaikan match aktif dan mulai match berikutnya? PTS tetap, ELIMS dan ALIVE kembali ke awal."))return;setBusy(true);flushScoresNow();await Promise.all([saveQueue.current,scoreQueue.current]);const r=await fetch("/api/admin/live-leaderboard",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:boardId,action:"nextMatch"})}),x=await r.json();if(r.ok){refreshOverlay();await loadBoard();setMsg(`MATCH ${x.matchNumber} DIMULAI. PTS DIBAWA, ELIMS DIRESET 0.`)}else setMsg(x.error||"GAGAL MEMULAI MATCH BERIKUTNYA.");setBusy(false)}
   function flushScoresNow(){
     if(scoreSaveTimer.current){clearTimeout(scoreSaveTimer.current);scoreSaveTimer.current=null}
-    const changes=[...pendingScoreDeltas.current.entries()].filter(([,delta])=>delta!==0);
+    const changes=[...pendingScoreDeltas.current.entries()].filter(([,delta])=>delta!==0),sequences=new Map(changes.map(([team])=>[team,latestScoreSequence.current.get(team)]));
     pendingScoreDeltas.current.clear();
     if(!changes.length)return;
     scoreQueue.current=scoreQueue.current.then(async()=>{
@@ -251,24 +227,24 @@ export default function LiveLeaderboardAdmin() {
         if(!r.ok)throw new Error(x.error||"Gagal memperbarui eliminasi.");
         return x.team;
       }));
-      setData((current:any)=>{const next={...current,totals:(current.totals||[]).map((row:any)=>{
+      if(boardRef.current!==boardId)return;for(const [teamId,sequence] of sequences)refreshOverlay(teamId,sequence);setData((current:any)=>{if(!current)return current;const next={...current,totals:(current.totals||[]).map((row:any)=>{
         const saved=results.find((team:any)=>Number(team?.teamId)===Number(row.teamId));
-        return saved&&!pendingScoreDeltas.current.has(Number(row.teamId))?{...row,...saved}:row;
+        return saved&&latestScoreSequence.current.get(Number(row.teamId))===sequences.get(Number(row.teamId))?{...row,...saved}:row;
       })};dataRef.current=next;return next});
-    }).catch((error)=>{setMsg(error instanceof Error?error.message:"Gagal memperbarui eliminasi.");void loadBoard()});
+    }).catch((error)=>{setMsg(error instanceof Error?error.message:"Gagal memperbarui eliminasi.");for(const [teamId,sequence] of sequences)refreshOverlay(teamId,sequence);void loadBoard(boardId)});
   }
   function updateElims(teamId:number,delta:number){
     const current=dataRef.current;
     if(!current)return;
     const totalsNow=current.totals||[],existing=totalsNow.find((row:any)=>Number(row.teamId)===teamId),oldElims=Number(existing?.elims||0),nextElims=Math.max(0,oldElims+delta),applied=nextElims-oldElims;
     if(!applied)return;
-    const found=Boolean(existing),nextTotals=(found?totalsNow:[...totalsNow,{teamId,points:0,elims:0,overallElims:0}]).map((row:any)=>Number(row.teamId)!==teamId?row:{...row,elims:nextElims,overallElims:Math.max(0,Number(row.overallElims||0)+applied),points:Math.max(0,Number(row.points||0)+applied)}),nextData={...current,totals:nextTotals};
+    const increment=applied*Number(current.config.eliminationPoint??1),found=Boolean(existing),nextTotals=(found?totalsNow:[...totalsNow,{teamId,points:0,elims:0,overallElims:0}]).map((row:any)=>Number(row.teamId)!==teamId?row:{...row,elims:nextElims,overallElims:Math.max(0,Number(row.overallElims||0)+applied),points:Math.max(0,Number(row.points||0)+increment)}),nextData={...current,totals:nextTotals};
     dataRef.current=nextData;
     setData(nextData);
-    broadcastTeam(teamId,{elims:nextElims,overallElims:Math.max(0,Number(existing?.overallElims||0)+applied),points:Math.max(0,Number(existing?.points||0)+applied)});
+    latestScoreSequence.current.set(teamId,broadcastTeam(teamId,{elims:nextElims,overallElims:Math.max(0,Number(existing?.overallElims||0)+applied),points:Math.max(0,Number(existing?.points||0)+increment)}));
     pendingScoreDeltas.current.set(teamId,(pendingScoreDeltas.current.get(teamId)||0)+applied);
     if(scoreSaveTimer.current)clearTimeout(scoreSaveTimer.current);
-    scoreSaveTimer.current=setTimeout(flushScoresNow,20);
+    scoreSaveTimer.current=setTimeout(flushScoresNow,15);
   }
   async function hideWinner() {
     setBusy(true);
@@ -279,10 +255,14 @@ export default function LiveLeaderboardAdmin() {
       body: JSON.stringify({ id: boardId, action: "hideWinner" }),
     });
     if (r.ok) {
-      config({ winnerHidden: true }, false);
+      config({ winnerHidden: true }, false);refreshOverlay();
       setMsg("POPUP WWCD DISEMBUNYIKAN.");
     } else setMsg("GAGAL MENYEMBUNYIKAN WWCD.");
     setBusy(false);
+  }
+  function flushStyle(){if(styleTimer.current){clearTimeout(styleTimer.current);styleTimer.current=null}const pending=pendingStyle.current;pendingStyle.current=null;if(!pending)return;saveQueue.current=saveQueue.current.then(async()=>{const r=await fetch("/api/admin/live-leaderboard",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({...pending,action:"setBoardStyle"})});if(!r.ok)throw Error((await r.json()).error);if(boardRef.current===pending.id)refreshOverlay()}).catch(e=>{setMsg(e.message);void loadBoard(pending.id)})}
+  function changeBoardStyle(styleId:StyleId,design?:BoardStyle){
+   const current=dataRef.current;if(!current)return;const next={...current,config:{...current.config,boardStyle:{...current.config.boardStyle,styleId,design}}};setData(next);dataRef.current=next;channelRef.current?.postMessage({type:"style-patch",styleId,design});pendingStyle.current={id:boardId,styleId,design};if(styleTimer.current)clearTimeout(styleTimer.current);styleTimer.current=setTimeout(flushStyle,100)
   }
   if (!data)
     return (
@@ -323,7 +303,7 @@ export default function LiveLeaderboardAdmin() {
           </select>
         </label>
         <label>
-          TEMPLATE
+          WARNA LIVE / TEMPLATE LAMA
           <select
             value={active.id}
             onChange={(e) => config({ activeTemplateId: e.target.value })}
@@ -351,6 +331,7 @@ export default function LiveLeaderboardAdmin() {
             DELETE
           </button>
         </div>
+        <StyleControls id={data.config.boardStyle?.styleId||"original"} design={data.config.boardStyle?.design} onChange={changeBoardStyle}/>
         <div className="live-setting-grid">
           {(
             [
@@ -448,7 +429,7 @@ export default function LiveLeaderboardAdmin() {
             <h1>LIVE PREVIEW OBS</h1>
             <p>1920 × 1080 · TRANSPARENT BACKGROUND</p>
           </div>
-          <button onClick={() => navigator.clipboard.writeText(url)}>
+          <button onClick={()=>void copyShortLink(shortObs||url).then(()=>setMsg("Link OBS singkat tersalin.")).catch(()=>setMsg("Gagal menyalin link OBS."))}>
             COPY URL OBS
           </button>
         </section>
@@ -497,12 +478,12 @@ export default function LiveLeaderboardAdmin() {
                 <div className="score-step">
                   <span>ELIMS {row?.elims ?? 0}</span>
                   <button
-                    onClick={() => updateElims(team.id,-1)}
+                    disabled={busy} onClick={() => updateElims(team.id,-1)}
                   >
                     −
                   </button>
                   <button
-                    onClick={() => updateElims(team.id,1)}
+                    disabled={busy} onClick={() => updateElims(team.id,1)}
                   >
                     +
                   </button>
@@ -512,7 +493,7 @@ export default function LiveLeaderboardAdmin() {
                     <button
                       key={i}
                       className={status}
-                      onClick={() => cyclePlayer(team.id,i)}
+                      disabled={busy} onClick={() => cyclePlayer(team.id,i)}
                     >
                       P{i + 1} {status.toUpperCase()}
                     </button>
@@ -520,7 +501,7 @@ export default function LiveLeaderboardAdmin() {
                 </div>
                 <div className="quick-status">
                   {[4, 3, 2, 1, 0].map((n) => (
-                    <button key={n} onClick={() => quick(team.id, n)}>
+                    <button key={n} disabled={busy} onClick={() => quick(team.id, n)}>
                       {n ? `${n} ALIVE` : "TEAM WIPE"}
                     </button>
                   ))}

@@ -1,6 +1,7 @@
+import {sanitizeDesign,isStyleId,type BoardStyle,type StyleId} from "./leaderboard-style";
 export type PlayerStatus = "alive" | "knocked" | "eliminated";
 export type TeamLiveState = { pointsAdjust: number; elimsAdjust: number; players: [PlayerStatus, PlayerStatus, PlayerStatus, PlayerStatus] };
-export type LiveTemplate = { id: string; name: string; panelWidth: number; panelHeight: number; rowHeight: number; headerHeight: number; rankX: number; logoX: number; teamX: number; ptsX: number; elimsX: number; aliveX: number; fontSize: number; logoSize: number; fontFamily: string; textColor: string; headerTextColor: string; backgroundColor: string; backgroundOpacity: number; headerColor: string; aliveColor: string; knockedColor: string; eliminatedColor: string; dividerColor: string; spacing: number; rowOpacity: number };
+export type LiveTemplate = { styleId?:StyleId;design?:BoardStyle; id: string; name: string; panelWidth: number; panelHeight: number; rowHeight: number; headerHeight: number; rankX: number; logoX: number; teamX: number; ptsX: number; elimsX: number; aliveX: number; fontSize: number; logoSize: number; fontFamily: string; textColor: string; headerTextColor: string; backgroundColor: string; backgroundOpacity: number; headerColor: string; aliveColor: string; knockedColor: string; eliminatedColor: string; dividerColor: string; spacing: number; rowOpacity: number };
 
 // Protected broadcast geometry. Keep POS -> LOGO -> TEAM -> PTS -> ELIMS -> ALIVE
 // at these coordinates unless the LIVE LEADERBOARD VERTICAL layout is explicitly changed.
@@ -35,4 +36,5 @@ export function cleanTemplate(source: Partial<LiveTemplate>, fallback = baseTemp
     spacing: LIVE_LEADERBOARD_VERTICAL_LOCKED.spacing, rowOpacity: numberValue(source.rowOpacity, fallback.rowOpacity, .1, 1),
   };
 }
+export function withBoardStyle(template:LiveTemplate,layout:unknown):LiveTemplate{const l=layout&&typeof layout==="object"?layout as {styleId?:StyleId;design?:BoardStyle}:{};const {styleId:_old,design:_design,...base}=template;if(!isStyleId(l.styleId)||(!l.design&&l.styleId==="original"))return base;return {...base,styleId:l.styleId,design:sanitizeDesign(l.design,l.styleId)}}
 export function freshState(): TeamLiveState { return { pointsAdjust: 0, elimsAdjust: 0, players: ["alive", "alive", "alive", "alive"] }; }

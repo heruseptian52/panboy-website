@@ -18,6 +18,7 @@ export default async function Page() {
           {a.leaderboard && <a href="/admin/kalkulator-poin">HITUNG POIN</a>}
           {a.leaderboardDesign && <a href="/admin/desain-leaderboard">TEMPLATE & EXPORT</a>}
           <a href="/admin/live-leaderboard">LIVE OBS</a>
+          {a.isOwner&&<a href="/admin/kelola-template-leaderboard">KELOLA TEMPLATE</a>}
           <a href="/api/admin/auth/logout">KELUAR</a>
         </AdminHeaderLinks>
       </header>

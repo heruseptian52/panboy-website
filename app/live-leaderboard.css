@@ -2,7 +2,7 @@
 .live-board-panel header{position:absolute;inset:0 0 auto;clip-path:polygon(7% 0,100% 0,100% 100%,0 100%);font-size:.55em;letter-spacing:.4px}
 .live-board-panel header span,.live-board-row>*{position:absolute;top:50%;transform:translate(-50%,-50%);white-space:nowrap}
 .live-board-panel header span:first-child{transform:translateY(-50%)}
-.live-board-row{position:absolute;left:0;right:0;border-bottom:1px solid;transition:top .55s cubic-bezier(.2,.85,.25,1),opacity .3s,background .3s;background:linear-gradient(90deg,#0a2840e8,#061624e8)}
+.live-board-row{position:absolute;left:0;right:0;border-bottom:1px solid;transition:top .16s cubic-bezier(.2,.85,.25,1),opacity .12s,background .12s;background:linear-gradient(90deg,#0a2840e8,#061624e8)}
 .live-board-row:nth-of-type(even){background:linear-gradient(90deg,#0c304be8,#071b2ae8)}
 .live-board-row.wiped{filter:saturate(.25);background:#111b22}
 .live-board-row.wiped>*:not(.row-eliminated){opacity:.28}

@@ -1,4 +1,5 @@
 "use client";
+import {shortLink,copyShortLink} from "../../../lib/short-link-client";
 import { uploadForm } from "../../../lib/upload-form";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -10,6 +11,8 @@ import {
   type RenderTeam,
 } from "../../../lib/leaderboard-render";
 import { effectiveLayout, isLockedLeaderboard, masterDefaults, preserveLockedLeaderboard, type MasterLayout } from "../../../lib/master-layout";
+import type {StyleId} from "../../../lib/leaderboard-style";
+import {StyleControls} from "../kelola-template-leaderboard/style-controls";
 import { rankLeaderboardTeams } from "../../../lib/leaderboard-ranking";
 type Data = {
   board: {
@@ -178,7 +181,7 @@ export default function Designer() {
     [height, setHeight] = useState(1080),
     [preset, setPreset] = useState("auto"),
     [uploading, setUploading] = useState(false),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),[shortObs,setShortObs]=useState(""),[visibleStyleIds,setVisibleStyleIds]=useState<StyleId[]|null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const renderVersion = useRef(0);
   useEffect(() => {
@@ -221,6 +224,7 @@ export default function Designer() {
         }
       });
   }, [id]);
+  useEffect(()=>{setShortObs("");if(data?.board.overlayToken){let active=true;void shortLink(location.origin+"/overlay/leaderboard/"+data.board.overlayToken).then(x=>{if(active)setShortObs(x)});return()=>{active=false}}},[data?.board.overlayToken]);
   const renderLayout = useMemo(() => effectiveLayout(layout, master), [layout, master]);
   const layoutLocked = isLockedLeaderboard(layout);
   const ranking = useMemo<RenderTeam[]>(
@@ -291,6 +295,7 @@ export default function Designer() {
                   ? "textOnly"
                   : "full",
             ...selected.layout,
+            ...(id==="podium"?{styleId:"original" as const,design:undefined}:{}),
           };
     setLayout(next);
     if (id === "podium") { setWidth(1080); setHeight(1350); }
@@ -405,11 +410,13 @@ export default function Designer() {
     const change=(value:number)=>{setMaster({...master,[key]:value});setLayout({...layout,followMaster:true,[key]:value})};
     return <label>{label}<input type="range" min={min} max={max} step="0.1" value={master[key]} onChange={(e)=>change(Number(e.target.value))}/><input type="number" min={min} max={max} step="0.1" value={master[key]} onChange={(e)=>change(Number(e.target.value))}/></label>;
   }
-  function exportFile(type: "png" | "jpg" | "pdf") {
+  async function exportFile(type: "png" | "jpg" | "pdf") {
     try {
       if (!canvas.current || !data) return;
-      if (type === "pdf") downloadPdf(canvas.current, exportName);
-      else downloadCanvas(canvas.current, type, exportName);
+      const final=document.createElement("canvas");
+      await drawLeaderboard(final,{name:exportName,templateUrl:template,canvasWidth:width,canvasHeight:height,layout:renderLayout,masterLayout:master,matchHighlights},ranking);
+      if (type === "pdf") downloadPdf(final, exportName);
+      else downloadCanvas(final, type, exportName);
     } catch {
       setMessage(
         "Gambar dari link luar memblokir export. Upload langsung template/logo agar bisa diunduh.",
@@ -436,7 +443,7 @@ export default function Designer() {
         </select>
       </section>
     );
-  const obs = `${typeof location !== "undefined" ? location.origin : ""}/overlay/leaderboard/${data.board.overlayToken}`;
+  const obs = shortObs || `${typeof location !== "undefined" ? location.origin : ""}/overlay/leaderboard/${data.board.overlayToken}`;
   return (
     <section className="admin-content designer-page">
       <div className="admin-title">
@@ -547,9 +554,10 @@ export default function Designer() {
             <option value="textOnly">TRANSPARAN TEKS SAJA</option>
             <option value="green">GREEN SCREEN</option>
           </select>
+          <StyleControls onVisibility={setVisibleStyleIds} id={layout.styleId||"original"} design={layout.design} onChange={(styleId,design)=>setLayout(old=>({...old,styleId,design,concept:styleId==="original"?old.concept:undefined,backgroundMode:styleId==="original"?old.backgroundMode:"transparent"}))}/>
           <h3>PILIH KONSEP LAYOUT</h3>
           <div className="layout-preset-grid">
-            {layoutPresets.map((item) => (
+            {layoutPresets.filter(item=>item.id!=="podium"||visibleStyleIds?.includes("original")).map((item) => (
               <button
                 type="button"
                 className={preset === item.id ? "active" : ""}
@@ -810,7 +818,7 @@ export default function Designer() {
           <section className="obs-box">
             <h3>URL BROWSER SOURCE OBS</h3>
             <input readOnly value={obs} />
-            <button onClick={() => navigator.clipboard.writeText(obs)}>
+            <button onClick={()=>void copyShortLink(obs).then(()=>setMessage("Link OBS tersalin.")).catch(()=>setMessage("Gagal menyalin link OBS."))}>
               COPY URL OBS
             </button>
             <p>

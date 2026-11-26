@@ -35,6 +35,7 @@ export function menuGroups(a: AdminPermissions): MenuGroup[] {
     ] },
     { id: "tools", label: "Tools Event", description: "Hitung poin, leaderboard, dan live OBS.", icon: "scoring", items: [
       ...(a.leaderboard ? [{ href: "/admin/kalkulator-poin", label: "Hitung Poin", description: "Kelola perhitungan poin pertandingan.", icon: "scoring" } as MenuItem] : []),
+      ...(a.isOwner ? [{ href: "/admin/kelola-template-leaderboard", label: "Kelola Template Leaderboard", description: "Visibilitas, urutan, dan default template desain.", icon: "template" } as MenuItem] : []),
       ...(a.leaderboardDesign ? [{ href: "/admin/desain-leaderboard", label: "Template & Export", description: "Desain dan ekspor leaderboard.", icon: "template" } as MenuItem] : []),
       ...(a.liveObs ? [{ href: "/admin/live-leaderboard", label: "Live OBS", description: "Atur tampilan leaderboard saat siaran.", icon: "live" } as MenuItem] : []),
     ] },

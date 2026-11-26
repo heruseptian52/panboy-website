@@ -1,0 +1,1 @@
+export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){const {id}=await params;if(!/^\d{1,12}$/.test(id)||Number(id)<1)return new Response("Link tidak ditemukan",{status:404});return new Response(null,{status:302,headers:{Location:new URL("/event/"+id,request.url).href,"Cache-Control":"no-store"}})}

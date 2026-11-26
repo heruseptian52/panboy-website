@@ -1,4 +1,5 @@
 import { effectiveLayout } from "./master-layout";
+import {sanitizeDesign,designRowHeight,designRadius,podiumColors,type BoardStyle,type StyleId} from "./leaderboard-style";
 
 export type RenderTeam = {
   id: number;
@@ -12,6 +13,8 @@ export type RenderTeam = {
   total: number;
 };
 export type Layout = {
+  styleId?: StyleId;
+  design?: BoardStyle;
   concept?: "podium";
   gradientStart?: string;
   gradientEnd?: string;
@@ -46,7 +49,7 @@ export type Layout = {
   alternateRowColor?: string;
   totalColor?: string;
 };
-export const defaults: Required<Omit<Layout, "concept" | "lockedVariant">> = {
+export const defaults: Required<Omit<Layout, "concept" | "lockedVariant" | "styleId" | "design">> = {
   gradientStart: "#1744c9",
   gradientEnd: "#f3bd28",
   gradientAngle: 135,
@@ -79,14 +82,28 @@ export const defaults: Required<Omit<Layout, "concept" | "lockedVariant">> = {
   alternateRowColor: "#262626",
   totalColor: "#f2c354",
 };
-async function image(url: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const i = new Image();
-    i.crossOrigin = "anonymous";
-    i.onload = () => resolve(i);
-    i.onerror = reject;
-    i.src = url;
-  });
+const imageCache=new Map<string,Promise<HTMLImageElement>>();
+async function image(url:string){
+ let pending=imageCache.get(url);if(!pending){pending=new Promise<HTMLImageElement>((resolve,reject)=>{const i=new Image(),timer=setTimeout(()=>{i.src="";reject(Error("Image timeout"))},8000);i.crossOrigin="anonymous";i.onload=()=>{clearTimeout(timer);resolve(i)};i.onerror=()=>{clearTimeout(timer);reject(Error("Image failed"))};i.src=url});imageCache.set(url,pending);pending.catch(()=>imageCache.delete(url));if(imageCache.size>256)imageCache.delete(imageCache.keys().next().value!)}return pending;
+}
+function shape(ctx:CanvasRenderingContext2D,id:StyleId,d:BoardStyle,x:number,y:number,w:number,h:number,color:string,kind:"row"|"rank"|"point"|"header",highlight?:string){
+ if(w<=0||h<=0)return;ctx.save();ctx.shadowBlur=0;ctx.globalAlpha=d.opacity;ctx.beginPath();
+ if(id==="futuristic"){const cut=Math.min(w*.13,h*.3);ctx.moveTo(x+cut,y);ctx.lineTo(x+w,y);ctx.lineTo(x+w-cut,y+h);ctx.lineTo(x,y+h);ctx.closePath()}
+ else if(id==="capsule"||id==="split"||id==="glass"||d.radius>0){ctx.roundRect(x,y,w,h,designRadius(id,d,h))}
+ else ctx.rect(x,y,w,h);
+ if(d.gradient&&(kind==="row"||kind==="header")){const g=ctx.createLinearGradient(x,y,x+w,y+h);g.addColorStop(0,color);g.addColorStop(1,d.gradientEnd);ctx.fillStyle=g}else ctx.fillStyle=color;
+ ctx.fill();if(d.borderWidth>0){ctx.strokeStyle=highlight||d.border;ctx.lineWidth=d.borderWidth;if(id==="minimalist"){ctx.beginPath();ctx.moveTo(x,y+h);ctx.lineTo(x+w,y+h)}ctx.stroke()}
+ if(id==="glass"){ctx.strokeStyle="#ffffff40";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x+5,y+2);ctx.lineTo(x+w-5,y+2);ctx.stroke()}ctx.restore();
+}
+function styledRow(ctx:CanvasRenderingContext2D,id:StyleId,d:BoardStyle,x:number,y:number,width:number,gap:number,positions:{rank:number;logo:number;name:number;wwcd:number;kills:number;placement:number;total:number},canvasWidth:number,base:number,rank:number){
+ const height=designRowHeight(d,gap),top=y-height/2,px=(v:number)=>canvasWidth*(base+v)/100,highlight=d.highlight&&rank<=3?podiumColors[rank-1]:undefined;
+ const end=x+width,at=(a:number,b:number)=>Math.max(x,Math.min(end,(px(a)+px(b))/2)),rankEnd=at(positions.rank,positions.logo),nameEnd=Math.max(rankEnd,px(positions.wwcd)-Math.min(canvasWidth*.035,(px(positions.kills)-px(positions.wwcd))/2)),edges=[nameEnd,at(positions.wwcd,positions.kills),at(positions.kills,positions.placement),at(positions.placement,positions.total),end],sep=id==="split"?Math.min(5,gap*.06):id==="capsule"?Math.min(3,gap*.04):0;
+ if(id!=="split")shape(ctx,id,d,x,top,width,height,d.row,"row",highlight);
+ if(id==="split"){shape(ctx,id,d,rankEnd+sep,top,Math.max(0,nameEnd-rankEnd-2*sep),height,d.row,"row",highlight)}
+ const blockRank=id==="original"||id==="capsule"||id==="official"||id==="championship"||id==="futuristic"||id==="split"||id==="glass";
+ if(blockRank)shape(ctx,id,d,x+sep,top,rankEnd-x-2*sep,height,highlight||d.rank,"rank",highlight);
+ if(id!=="minimalist")for(let i=0;i<4;i++)shape(ctx,id,d,edges[i]+sep,top,edges[i+1]-edges[i]-2*sep,height,d.point,"point",highlight);
+ if(id==="minimalist"&&highlight)shape(ctx,id,d,x,top,Math.max(2,d.borderWidth*2),height,highlight,"rank");
 }
 async function drawPodium(ctx: CanvasRenderingContext2D, w: number, h: number, teams: RenderTeam[], highlights: Array<{ number: number; map: string; team: string; logoUrl: string; eliminations: number }>, layout: Layout) {
   const sx = w / 1080, sy = h / 1350;
@@ -194,6 +211,8 @@ export async function drawLeaderboard(
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   ctx.clearRect(0, 0, w, h);
+  await Promise.all(teams.map(t=>t.logoUrl?image(t.logoUrl).catch(()=>null):Promise.resolve(null)));
+  const styleId=l.styleId||"original",customStyle=l.design||styleId!=="original"?sanitizeDesign(l.design,styleId):null;
   if (l.concept === "podium") {
     await drawPodium(ctx, w, h, teams, board.matchHighlights || [], l);
     return;
@@ -253,14 +272,15 @@ export async function drawLeaderboard(
               };
       if (l.backgroundMode !== "textOnly") {
         ctx.fillStyle = l.headerColor;
-        ctx.fillRect(
+        if(customStyle)shape(ctx,styleId,customStyle,(w*(base+(referenceWide?1:columns===2?2:3.5)))/100,start-gap*1.08,(w*(referenceWide?48:columns===2?47:93))/100,gap*.62,customStyle.header,"header");
+        else ctx.fillRect(
           (w * (base + (referenceWide ? 1 : columns === 2 ? 2 : 3.5))) / 100,
           start - gap * 1.08,
           (w * (referenceWide ? 48 : columns === 2 ? 47 : 93)) / 100,
           gap * 0.62,
         );
       }
-      ctx.fillStyle = l.accentColor;
+      ctx.fillStyle = customStyle?.text||l.accentColor;
       ctx.font = `900 ${font * 0.55}px Arial`;
       ctx.textAlign = "center";
       ctx.fillText(
@@ -321,6 +341,8 @@ export async function drawLeaderboard(
     const qualified = i < Math.max(0, l.qualifyTop),
       normalRow = row % 2 ? l.alternateRowColor : l.rowColor;
     if (l.backgroundMode !== "textOnly") {
+      if(customStyle)styledRow(ctx,styleId,customStyle,(w*(base+(referenceWide?1:columns===2?2:3.5)))/100,y,(w*(referenceWide?48:columns===2?47:93))/100,gap,pos,w,base,i+1);
+      else {
       ctx.fillStyle =
         l.rowStyle === "qualifiedRows" && qualified
           ? l.qualifiedColor
@@ -350,13 +372,14 @@ export async function drawLeaderboard(
           gap * 0.84,
         );
       }
+      }
     }
-    ctx.fillStyle =
+    ctx.fillStyle = customStyle?.text || (
       qualified && l.rowStyle !== "solid"
         ? l.qualifiedTextColor
         : i < 3
           ? l.accentColor
-          : l.textColor;
+          : l.textColor);
     ctx.font = `950 ${font}px Arial`;
     ctx.textAlign = "center";
     ctx.fillText(
@@ -374,7 +397,7 @@ export async function drawLeaderboard(
           logo,
         );
       } catch {}
-    ctx.fillStyle = l.textColor;
+    ctx.fillStyle = customStyle?.text||l.textColor;
     ctx.font = `900 ${font}px Arial`;
     ctx.textAlign = "left";
     const max = (w * (pos.wwcd - pos.name - 3)) / 100;
@@ -407,7 +430,7 @@ export async function drawLeaderboard(
         y,
       );
     }
-    ctx.fillStyle = l.totalColor;
+    ctx.fillStyle = customStyle?.total||l.totalColor;
     ctx.fillText(String(t.total), (w * (base + pos.total)) / 100, y);
     ctx.textAlign = "left";
   }
