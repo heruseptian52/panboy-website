@@ -24,7 +24,7 @@ export default function MenuContent({ groups, selectedId }: { groups: MenuGroup[
       {shown.map(group => {
         const items = group.items.filter(item => !query || `${group.label} ${item.label} ${item.description}`.toLocaleLowerCase("id").includes(query));
         if (!items.length) return null;
-        const groupCount = group.id === "member" ? group.items.reduce((sum, item) => sum + (item.alert ? alerts[item.alert] : 0), 0) : 0;
+        const groupCount = group.items.reduce((sum, item) => sum + (item.alert ? alerts[item.alert] : 0), 0);
         return <section className="admin-menu-group" key={group.id} aria-labelledby={`group-${group.id}`}>
           <div className="admin-menu-group-head"><PanboyIcon name={group.icon} /><div><h2 id={`group-${group.id}`}>{group.label}</h2><p>{group.description}</p></div>{groupCount > 0 && <span className="admin-menu-count" aria-label={`${groupCount} pemberitahuan menunggu`}>{groupCount > 99 ? "99+" : groupCount}</span>}{!selectedId && <a href={`/admin/menu/${group.id}`} className="admin-menu-open">Lihat kategori →</a>}</div>
           <div className="admin-menu-cards">{items.map(item => {

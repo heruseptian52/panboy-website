@@ -15,7 +15,7 @@ type Admin = {
   canMembers: boolean;
   canFinance: boolean;
   memberDues: boolean; blacklist: boolean; communityProfile: boolean;
-  services: boolean; topup: boolean; analytics: boolean;
+  services: boolean; topup: boolean; analytics: boolean; market: boolean;
   active: boolean;
   accessExpiresAt: string | null;
 };
@@ -34,7 +34,7 @@ const empty = {
   canMembers: false,
   canFinance: false,
   memberDues: false, blacklist: false, communityProfile: false,
-  services: false, topup: false, analytics: false,
+  services: false, topup: false, analytics: false, market: false,
   active: true,
   durationDays: "30",
 };
@@ -90,7 +90,7 @@ export default function AccessAdmin() {
       canFinance: Boolean(a.canFinance),
       memberDues: Boolean(a.memberDues), blacklist: Boolean(a.blacklist),
       communityProfile: Boolean(a.communityProfile), services: Boolean(a.services),
-      topup: Boolean(a.topup), analytics: Boolean(a.analytics),
+      topup: Boolean(a.topup), analytics: Boolean(a.analytics), market: Boolean(a.market),
       active: Boolean(a.active),
       durationDays: "0",
     });
@@ -109,6 +109,7 @@ export default function AccessAdmin() {
     ["topup", "Pengaturan Top Up & Supplier"],
     ["services", "Jasa Design & Caster"],
     ["analytics", "Analitik"],
+    ["market", "Esports Market"],
     ["canPartners", "Partnership"],
     ["canOrders", "Pesanan"],
     ["canAppearance", "Tampilan Website, Fitur, Video & Music"],
@@ -239,7 +240,7 @@ export default function AccessAdmin() {
                 {a.communityProfile && <span>COMMUNITY PROFILE</span>}
                 {a.services && <span>JASA & CASTER</span>}
                 {a.topup && <span>TOP UP ADMIN</span>}
-                {a.analytics && <span>ANALITIK</span>}
+                {a.analytics && <span>ANALITIK</span>}{a.market && <span>ESPORTS MARKET</span>}
                 {a.canFinance && <span>KEUANGAN</span>}
                 {a.canProducts && <span>PRODUK</span>}
                 {a.canPartners && <span>PARTNER</span>}

@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { requestAdmin } from "../../../../lib/admin-auth";
 
 const maxSize = 200 * 1024 * 1024, CHUNK = 1024 * 1024;
-type UploadMeta = { key: string; size: number; type: string; parts: number; created: number; multipartId?: string; uploaded: Array<{partNumber:number;etag:string}> };
+type UploadMeta = { key: string; size: number; type: string; parts: number; created: number; multipartId?: string; uploaded: Array<{partNumber:number;etag:string}>; result?:string };
 const validId = (value: string) => /^[a-f0-9-]{36}$/.test(value);
 const error = (message: string, status = 400) => Response.json({ error: message }, { status });
 
@@ -36,9 +36,10 @@ export async function POST(request: Request) {
   if (action === "chunk") {
     const index = Number(url.searchParams.get("index"));
     if (!Number.isInteger(index) || index < 0 || index >= meta.parts) return error("Bagian video tidak valid");
+    if(meta.multipartId&&meta.uploaded[Math.floor(index/6)]&&index<Math.floor(meta.parts/6)*6)return Response.json({partNumber:index+1,etag:`staged-${index}`});
     const chunk = await request.arrayBuffer();
     if (chunk.byteLength !== Math.min(CHUNK, meta.size - index * CHUNK)) return error("Bagian video tidak lengkap");
-    if(showcase&&index===0){const bytes=new Uint8Array(chunk);const valid=meta.type==="video/mp4"?bytes.length>=12&&String.fromCharCode(...bytes.slice(4,8))==="ftyp":bytes.length>=4&&bytes[0]===0x1a&&bytes[1]===0x45&&bytes[2]===0xdf&&bytes[3]===0xa3;if(!valid)return error("Isi file bukan video MP4/WebM yang valid.");}
+    if(index===0){const bytes=new Uint8Array(chunk);const valid=meta.type==="video/mp4"?bytes.length>=12&&String.fromCharCode(...bytes.slice(4,8))==="ftyp":bytes.length>=4&&bytes[0]===0x1a&&bytes[1]===0x45&&bytes[2]===0xdf&&bytes[3]===0xa3;if(!valid)return error("Isi file bukan video MP4/WebM yang valid.");}
     await env.BUCKET.put(`${temp}/part-${index}`, chunk);
     if (meta.multipartId && index % 6 === 5) {
       const bytes = await readGroup(temp, index - 5, index + 1);
@@ -50,7 +51,9 @@ export async function POST(request: Request) {
     }
     return Response.json({ partNumber: index + 1, etag: `staged-${index}` });
   }
+  if (action === "cancel") {if(meta.multipartId&&!meta.result)await env.BUCKET.resumeMultipartUpload(meta.key,meta.multipartId).abort();await env.BUCKET.delete([`${temp}/meta.json`,...Array.from({length:meta.parts},(_,i)=>`${temp}/part-${i}`)]);return Response.json({ok:true});}
   if (action === "complete") {
+    if(meta.result)return Response.json({url:meta.result});
     try {
       if (meta.multipartId) {
         const tail = Math.floor(meta.parts / 6) * 6;
@@ -70,8 +73,7 @@ export async function POST(request: Request) {
     } catch (cause) {
       return error(cause instanceof Error ? cause.message : "Video gagal disimpan", 409);
     }
-    await env.BUCKET.delete([`${temp}/meta.json`, ...Array.from({ length: meta.parts }, (_, i) => `${temp}/part-${i}`)]);
-    return Response.json({ url: `/api/images/${encodeURIComponent(meta.key)}` });
+    const result=`/api/images/${encodeURIComponent(meta.key)}`;await env.BUCKET.put(`${temp}/meta.json`,JSON.stringify({...meta,result}));await env.BUCKET.delete(Array.from({length:meta.parts},(_,i)=>`${temp}/part-${i}`));return Response.json({url:result});
   }
   return error("Aksi upload tidak valid");
 }

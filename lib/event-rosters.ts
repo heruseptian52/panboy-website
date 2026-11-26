@@ -53,7 +53,7 @@ export function normalizePlayers(input: unknown, maxPlayers = 8) {
     if (!nick || nick.length > 50 || !/^\d{5,20}$/.test(playerId)) throw new Error("Isi nick dan ID angka 5–20 digit untuk setiap pemain.");
     return {nick, playerId};
   });
-  if (new Set(players.map(p=>p.playerId)).size!==players.length) throw new Error("ID pemain tidak boleh sama dalam satu team.");
+  // Duplicate IDs are retained for administrator review in Roster Checker.
   return players;
 }
 

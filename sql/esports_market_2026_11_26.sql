@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS esports_market_settings(id INTEGER PRIMARY KEY CHECK(id=1), settings TEXT NOT NULL DEFAULT '{}');
+CREATE TABLE IF NOT EXISTS esports_market(id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL CHECK(kind IN ('player','team')), draft TEXT NOT NULL, published TEXT, token_hash TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'pending', reason TEXT NOT NULL DEFAULT '', visible INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, start_at TEXT NOT NULL DEFAULT '', end_at TEXT NOT NULL DEFAULT '', member_id INTEGER, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS esports_market_status_idx ON esports_market(status,visible,sort_order);
+CREATE TABLE IF NOT EXISTS roster_issue_reviews(event_id INTEGER NOT NULL, issue_key TEXT NOT NULL, decision TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(event_id,issue_key));

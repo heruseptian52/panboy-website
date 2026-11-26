@@ -29,7 +29,7 @@ test('invalid image content is rejected even after all chunks',async()=>{
 test('video larger than edge limit uses small requests and multipart assembly',async()=>{
  const size=14*1024*1024+5,parts=Math.ceil(size/1048576);
  const init=await (await post(video,'/api/admin/upload-video?action=init',JSON.stringify({name:'test.mp4',size,parts}),{'Content-Type':'application/json'})).json();
- for(let i=0;i<parts;i++)assert.equal((await post(video,`/api/admin/upload-video?action=chunk&uploadId=${init.uploadId}&index=${i}`,new Uint8Array(Math.min(1048576,size-i*1048576)))).status,200);
+ for(let i=0;i<parts;i++){const chunk=new Uint8Array(Math.min(1048576,size-i*1048576));if(i===0)chunk.set([0,0,0,20,102,116,121,112]);assert.equal((await post(video,`/api/admin/upload-video?action=chunk&uploadId=${init.uploadId}&index=${i}`,chunk)).status,200)}
  const response=await post(video,`/api/admin/upload-video?action=complete&uploadId=${init.uploadId}`,JSON.stringify({parts:[]}),{'Content-Type':'application/json'});
  assert.equal(response.status,200,await response.clone().text());
  const key=decodeURIComponent((await response.json()).url.slice('/api/images/'.length));
@@ -53,4 +53,15 @@ test('showcase image chunk upload requires appearance and validates content into
  const headers={'x-admin':'yes'},init=await (await post(route,base+'init',body,{...headers,'Content-Type':'application/json'})).json();
  for(let i=0;i<2;i++)assert.equal((await post(route,base+'chunk&uploadId='+init.uploadId+'&index='+i,bytes.slice(i*init.chunkSize,(i+1)*init.chunkSize),headers)).status,200);
  const saved=await post(route,base+'complete&uploadId='+init.uploadId,null,headers);assert.equal(saved.status,200);assert.match((await saved.json()).url,/^\/api\/images\/showcase-media%2F/);
+});
+
+test("music upload validates, saves correct type and supports completion retry",async()=>{
+ const route=load("../app/api/admin/upload-audio/route.ts",{"cloudflare:workers":{env:{BUCKET:bucket}},"../../../../lib/admin-auth":{requestAdmin:async()=>({appearance:true})}});
+ const base="/api/admin/upload-audio?action=",size=32;
+ const init=await (await post(route,base+"init",JSON.stringify({name:"song.mp3",parts:1,size}),{"Content-Type":"application/json"})).json();
+ const bytes=new Uint8Array(size);bytes.set([73,68,51]);
+ assert.equal((await post(route,base+"chunk&uploadId="+init.uploadId+"&index=0",new Uint8Array(size))).status,400);
+ assert.equal((await post(route,base+"chunk&uploadId="+init.uploadId+"&index=0",bytes)).status,200);
+ const saved=await (await post(route,base+"complete&uploadId="+init.uploadId)).json(),again=await (await post(route,base+"complete&uploadId="+init.uploadId)).json();
+ assert.equal(saved.url,again.url);assert.equal(data.get(decodeURIComponent(saved.url.slice("/api/images/".length))).length,size);
 });

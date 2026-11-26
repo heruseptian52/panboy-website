@@ -20,3 +20,8 @@ test('jumlah grup dibatasi dan awalan team tersebar bila memungkinkan',()=>{
   assert.notEqual(result.find(x=>x.id===1).group,result.find(x=>x.id===2).group);
   assert.throws(()=>drawRoster([{id:1,teamName:'a'}],51));
 });
+
+test('120 teams across six groups remain unique and balanced',()=>{
+ const result=drawRoster(Array.from({length:120},(_,i)=>({id:i+1,teamName:`CLAN${i%20} TEAM${i+1}`})),6,()=>.73);
+ assert.equal(new Set(result.map(r=>r.id)).size,120);assert.deepEqual(Array.from({length:6},(_,i)=>result.filter(r=>r.group===i).length),[20,20,20,20,20,20]);
+});

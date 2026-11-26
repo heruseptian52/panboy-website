@@ -1,144 +1,38 @@
 "use client";
-
-import { useEffect } from "react";
-
-type RecordStatus = { node: HTMLElement; file: string; pending: number; failed: boolean };
-
-export default function UploadStatus() {
-  useEffect(() => {
-    const nativeFetch = window.fetch;
-    const records = new WeakMap<HTMLInputElement, RecordStatus>();
-    let active: HTMLInputElement | null = null;
-
-    function show(input: HTMLInputElement, message: string, state: string, percent?: number) {
-      const record = records.get(input);
-      if (!record || !input.isConnected) return;
-      record.node.dataset.state = state;
-      record.node.replaceChildren();
-      const label = document.createElement("span");
-      label.textContent = message;
-      record.node.append(label);
-      if (state === "uploading") {
-        const progress = document.createElement("progress");
-        progress.max = 100;
-        if (percent !== undefined) progress.value = percent;
-        progress.setAttribute("aria-label", percent === undefined ? "Menyiapkan upload" : `Upload ${percent}%`);
-        record.node.append(progress);
-      }
-    }
-
-    function onFile(event: Event) {
-      const input = event.target;
-      if (!(input instanceof HTMLInputElement) || input.type !== "file") return;
-      const file = input.files?.[0];
-      if (!file) return;
-      records.get(input)?.node.remove();
-      const node = document.createElement("div");
-      node.className = "site-upload-status";
-      node.setAttribute("role", "status");
-      node.setAttribute("aria-live", "polite");
-      input.insertAdjacentElement("afterend", node);
-      records.set(input, { node, file: file.name, pending: 0, failed: false });
-      active = input;
-      show(input, `${file.name} dipilih · siap diunggah.`, "selected");
-    }
-
-    // Resize large JPEGs only. Keep transparent PNGs, cutouts and payment evidence intact.
-    async function prepare(body: FormData, url: string) {
-      if (!/\/api\/(?:admin\/upload|uploads\/team-logo)(?:\?|$)/.test(url)) return body;
-      const entry = [...body.entries()].find(([, value]) => value instanceof File && value.type === "image/jpeg" && value.size > 1024 * 1024);
-      if (!entry) return body;
-      const [key, file] = entry as [string, File];
-      try {
-        const bitmap = await createImageBitmap(file);
-        try {
-          const scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
-          const canvas = document.createElement("canvas");
-          canvas.width = Math.round(bitmap.width * scale);
-          canvas.height = Math.round(bitmap.height * scale);
-          const context = canvas.getContext("2d");
-          if (!context) return body;
-          context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-          const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/jpeg", 0.85));
-          if (blob && blob.size < file.size) body.set(key, new File([blob], file.name, { type: "image/jpeg" }));
-        } finally { bitmap.close(); }
-      } catch { /* Fall back to the original image. */ }
-      return body;
-    }
-
-    window.fetch = function trackedFetch(input: RequestInfo | URL, init?: RequestInit) {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-      const body = init?.body;
-      const fileBody = body instanceof FormData && [...body.values()].some(value => value instanceof File || value instanceof Blob);
-      const chunkBody = body instanceof Blob && /\/api\/(?:admin\/upload(?:-(?:audio|video))?|blacklist\/upload|uploads\/team-logo|event-submissions\/upload|member-payments\/proof)\?action=chunk/.test(url);
-      const complete = /\/api\/(?:admin\/upload(?:-(?:audio|video))?|blacklist\/upload|uploads\/team-logo|event-submissions\/upload|member-payments\/proof)\?action=complete/.test(url);
-      if (complete && active && records.get(active)) {
-        const target = active, record = records.get(target)!;
-        show(target, `Menyimpan ${record.file}... 99%`, "uploading", 99);
-        return nativeFetch.call(window, input, init).then(response => {
-          show(target, response.ok ? `${record.file} berhasil diunggah: 100%.` : `${record.file} gagal diproses. Coba lagi.`, response.ok ? "success" : "error");
-          return response;
-        }, error => { show(target, `${record.file} gagal diproses. Coba lagi.`, "error"); throw error; });
-      }
-      if (!fileBody && !chunkBody) return nativeFetch.call(window, input, init);
-      const target = active;
-      const record = target && records.get(target);
-      if (record) {
-        record.pending++;
-        show(target!, `Menyiapkan ${record.file}...`, "uploading");
-      }
-      let requestStarted = false;
-      return (async () => {
-        const payload = fileBody ? await prepare(body as FormData, url) : body!;
-        if (init?.signal?.aborted) throw new DOMException("Upload dibatalkan", "AbortError");
-        return new Promise<Response>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          requestStarted = true;
-          xhr.open(init?.method || "POST", url);
-          xhr.timeout = chunkBody ? 120000 : 90000;
-          if (init?.credentials === "include") xhr.withCredentials = true;
-          new Headers(init?.headers).forEach((value, key) => xhr.setRequestHeader(key, value));
-          const abort = () => xhr.abort();
-          init?.signal?.addEventListener("abort", abort, { once: true });
-          const cleanup = () => init?.signal?.removeEventListener("abort", abort);
-          xhr.upload.onprogress = event => {
-            if (record && event.lengthComputable) {
-              const percent = Math.min(99, Math.round(event.loaded / event.total * 100));
-              show(target!, percent >= 99 ? `Upload ${record.file} terkirim · menyimpan file... 99%` : `Mengunggah ${record.file}: ${percent}%`, "uploading", percent);
-            }
-          };
-          xhr.onload = () => {
-            cleanup();
-            const response = new Response(xhr.responseText, { status: xhr.status, headers: { "Content-Type": xhr.getResponseHeader("Content-Type") || "application/json" } });
-            if (record) {
-              record.pending--;
-              if (!response.ok) record.failed = true;
-              if (record.failed) show(target!, `${record.file} gagal diunggah. Periksa pesan kesalahan lalu coba lagi.`, "error");
-              else if (record.pending === 0) show(target!, chunkBody ? `Bagian ${record.file} terkirim. Melanjutkan upload...` : `${record.file} berhasil diunggah: 100%. Simpan formulir jika diperlukan.`, chunkBody ? "uploading" : "success", chunkBody ? 99 : undefined);
-            }
-            resolve(response);
-          };
-          const failed = () => {
-            cleanup();
-            if (record) { record.pending--; record.failed = true; show(target!, `${record.file} gagal diunggah. Periksa koneksi lalu coba lagi.`, "error"); }
-            reject(new Error(init?.signal?.aborted ? "Upload dibatalkan." : "Koneksi upload terputus atau terlalu lama. Coba lagi."));
-          };
-          xhr.onerror = failed;
-          xhr.ontimeout = failed;
-          xhr.onabort = failed;
-          xhr.send(payload);
-        });
-      })().catch(error => {
-        if (!requestStarted && record) {
-          record.pending--;
-          record.failed = true;
-          show(target!, `${record.file} gagal diunggah. Coba lagi.`, "error");
-        }
-        throw error;
-      });
-    };
-    document.addEventListener("change", onFile, true);
-    return () => { document.removeEventListener("change", onFile, true); window.fetch = nativeFetch; };
-  }, []);
-  return null;
+import {useEffect} from "react";
+type Status={node:HTMLElement;file:File;preview:string;controller:AbortController;percent:number};
+type Session={target:HTMLInputElement;record:Status;size:number;chunkSize:number;parts:number;completed:Set<number>};
+export default function UploadStatus(){
+ useEffect(()=>{
+  const nativeFetch=window.fetch,records=new WeakMap<HTMLInputElement,Status>(),sessions=new Map<string,Session>();let active:HTMLInputElement|null=null;
+  const selected=new Set<Status>();
+  function show(target:HTMLInputElement,record:Status,message:string,state:string,percent?:number){
+   if(!target.isConnected||records.get(target)!==record)return;record.node.dataset.state=state;record.node.replaceChildren();const label=document.createElement("span");label.textContent=message;record.node.append(label);
+   if(state==="uploading"){const p=document.createElement("progress");p.max=100;if(percent!==undefined)p.value=percent;p.setAttribute("aria-label","Progress upload");record.node.append(p);const button=document.createElement("button");button.type="button";button.textContent="Batal upload";button.onclick=()=>record.controller.abort();record.node.append(button)}
+   if(state==="selected"&&record.preview){const img=document.createElement("img");img.src=record.preview;img.alt="Pratinjau file";img.style.cssText="display:block;max-width:100px;max-height:90px;object-fit:contain;margin:6px 0";record.node.append(img)}
+  }
+  function fileChange(event:Event){const target=event.target;if(!(target instanceof HTMLInputElement)||target.type!=="file")return;const file=target.files?.[0],old=records.get(target);if(old){old.node.remove();if(old.preview)URL.revokeObjectURL(old.preview);selected.delete(old)}if(!file)return;const node=document.createElement("div");node.className="site-upload-status";node.setAttribute("role","status");node.setAttribute("aria-live","polite");target.insertAdjacentElement("afterend",node);const record:Status={node,file,preview:file.type.startsWith("image/")?URL.createObjectURL(file):"",controller:new AbortController(),percent:0};records.set(target,record);selected.add(record);active=target;show(target,record,file.name+" dipilih · siap diunggah.","selected")}
+  const tracked=(input:RequestInfo|URL,init?:RequestInit):Promise<Response>=>{
+   const url=new URL(typeof input==="string"?input:input instanceof URL?input.href:input.url,location.origin),body=init?.body;
+   if(url.origin!==location.origin||!/^\/api\/(?:admin\/(?:upload(?:-audio|-video)?|showcase\/upload)|uploads\/team-logo|blacklist\/upload|event-submissions\/upload|member-payments\/proof|roster-events\/upload|esports-market\/upload)$/.test(url.pathname))return nativeFetch.call(window,input,init);
+   const action=url.searchParams.get("action")||url.searchParams.get("stage"),id=url.searchParams.get("uploadId")||new Headers(init?.headers).get("x-upload-token")||"",existing=sessions.get(id);
+   const candidate=existing?.target||active,pending=existing?.record||(candidate?records.get(candidate):undefined);
+   if(!candidate||!pending)return nativeFetch.call(window,input,init);
+   const target:HTMLInputElement=candidate,record:Status=pending;
+   const signal=typeof AbortSignal.any==="function"?AbortSignal.any([record.controller.signal,...(init?.signal?[init.signal]:[])]):init?.signal||record.controller.signal;
+   const args={...init,signal};
+   if(action==="init"){record.percent=0;if(record.controller.signal.aborted)record.controller=new AbortController();show(target,record,"Menyiapkan "+record.file.name+"... 0%","uploading",0);return nativeFetch.call(window,input,{...init,signal:init?.signal||record.controller.signal}).then(async r=>{const data=await r.clone().json().catch(()=>null);if(r.ok&&data){const uploadId=data.uploadId||data.token;let meta:any={};try{meta=typeof body==="string"?JSON.parse(body):{}}catch{}const size=Number(meta.size)||record.file.size,chunkSize=Number(data.chunkSize)||1024*1024;const parts=Number(data.parts||meta.parts)||Math.ceil(size/chunkSize);if(uploadId)sessions.set(uploadId,{target,record,size,chunkSize,parts,completed:new Set()})}else show(target,record,data?.error||"Upload gagal dilanjutkan.","error");return r})}
+   if((action==="complete"||action==="finish")&&existing){show(target,record,"Menyimpan "+record.file.name+"... 99%","uploading",99);return nativeFetch.call(window,input,args).then(async r=>{const data=await r.clone().json().catch(()=>null);show(target,record,r.ok?record.file.name+" berhasil diunggah: 100%.":data?.error||"Gagal menyimpan file.",r.ok?"success":"error",100);if(r.ok)sessions.delete(id);return r},e=>{show(target,record,"Upload belum tersimpan. Coba lagi.","error");throw e})}
+   const chunk=action==="chunk"&&body instanceof Blob,form=body instanceof FormData&&[...body.values()].some(v=>v instanceof File);
+   if(!chunk&&!form)return nativeFetch.call(window,input,init);
+   const index=Number(url.searchParams.get("index")??new Headers(init?.headers).get("x-chunk-index")??0);
+   async function once(){return new Promise<Response>((resolve,reject)=>{if(signal.aborted)return reject(new DOMException("Upload dibatalkan","AbortError"));const xhr=new XMLHttpRequest();xhr.open(init?.method||"POST",url.href);xhr.timeout=90000;if(init?.credentials==="include")xhr.withCredentials=true;new Headers(init?.headers).forEach((v,k)=>xhr.setRequestHeader(k,v));const abort=()=>xhr.abort(),cleanup=()=>signal.removeEventListener("abort",abort);signal.addEventListener("abort",abort,{once:true});xhr.upload.onprogress=e=>{if(e.lengthComputable){const p=existing?Math.min(99,Math.round((existing.completed.size+e.loaded/e.total)/existing.parts*100)):Math.min(99,Math.round(e.loaded/e.total*100));record.percent=Math.max(record.percent,p);show(target!,record,"Mengunggah "+record.file.name+": "+record.percent+"%","uploading",record.percent)}};xhr.onload=()=>{cleanup();if(!xhr.status)return reject(Error("Koneksi upload terputus."));resolve(new Response(xhr.responseText,{status:xhr.status,headers:{"Content-Type":xhr.getResponseHeader("Content-Type")||"application/json"}}))};xhr.onerror=xhr.ontimeout=xhr.onabort=()=>{cleanup();reject(Error(signal.aborted?"Upload dibatalkan.":"Koneksi upload terputus atau terlalu lama."))};xhr.send(body as XMLHttpRequestBodyInit)})}
+   return (async()=>{let last:unknown;for(let retry=0;retry<(chunk?3:1);retry++){try{const r=await once();if(chunk&&[408,429,500,502,503,504].includes(r.status)){last=Error("Koneksi upload terganggu.");if(retry<2){await new Promise(resolve=>setTimeout(resolve,300*(retry+1)));continue}}if(r.ok){if(existing){existing.completed.add(index);record.percent=Math.min(99,Math.round(existing.completed.size/existing.parts*100));show(target,record,"Mengunggah "+record.file.name+": "+record.percent+"%","uploading",record.percent)}else show(target,record,record.file.name+" berhasil diunggah: 100%.","success",100)}else{const data=await r.clone().json().catch(()=>null);show(target,record,data?.error||"Upload gagal ("+r.status+").","error")}return r}catch(e){last=e;if(signal.aborted||retry>=2)break;await new Promise(resolve=>setTimeout(resolve,300*(retry+1)))}}show(target,record,last instanceof Error?last.message:"Upload gagal. Coba lagi.","error");throw last})();
+  };
+  window.fetch=tracked;
+  const progress=(e:Event)=>{const x=(e as CustomEvent).detail;if(active){const r=records.get(active);if(r&&r.file.name===x.file)show(active,r,x.percent===100?r.file.name+" berhasil diunggah: 100%.":"Mengunggah "+r.file.name+": "+x.percent+"%",x.percent===100?"success":"uploading",x.percent)}};
+  const failure=(e:Event)=>{const x=(e as CustomEvent).detail;if(active){const r=records.get(active);if(r&&r.file.name===x.file)show(active,r,x.message,"error")}};
+  window.addEventListener("panboy-upload-progress",progress);window.addEventListener("panboy-upload-error",failure);document.addEventListener("change",fileChange,true);
+  return()=>{document.removeEventListener("change",fileChange,true);window.removeEventListener("panboy-upload-progress",progress);window.removeEventListener("panboy-upload-error",failure);if(window.fetch===tracked)window.fetch=nativeFetch;for(const r of selected)if(r.preview)URL.revokeObjectURL(r.preview)};
+ },[]);return null
 }

@@ -14,7 +14,7 @@ const adminRoute=load('../app/api/admin/roster-events/invitations/route.ts',{'cl
 const settingsRoute=load('../app/api/admin/roster-events/route.ts',{'cloudflare:workers':{env},'../../../../lib/admin-auth':{requirePermission:async()=>true},'../../../../lib/event-rosters':rosters,'../../../../lib/roster-xlsx':{createRosterWorkbook:()=>{}},'../../../../lib/roster-drive':{driveFolderId:()=>'',syncRosterLogo:async()=>({status:'pending',fileId:''})},'../../../../lib/roster-options':{defaultOptions:options,validateOptions:x=>x,readOptions:raw=>({...options,...JSON.parse(raw||"{}")}),readZones:()=>[],normalizeTeamPhone:()=>''},'../../../../lib/events':{ensureEventsTable:async()=>{}},'../../../../lib/settings':{ensureSettings:async()=>{}}});
 const deleteRoute=load('../app/api/admin/roster-events/entry/route.ts',{'cloudflare:workers':{env},'../../../../../lib/admin-auth':{requirePermission:async()=>true},'../../../../../lib/event-rosters':rosters});
 const drawLogic=load('../lib/roster-draw.ts',{});
-const drawRoute=load('../app/api/admin/roster-events/draw/route.ts',{'cloudflare:workers':{env},'../../../../../lib/admin-auth':{requirePermission:async()=>true},'../../../../../lib/event-rosters':rosters,'../../../../../lib/roster-draw':drawLogic});
+const drawRoute=load('../app/api/admin/roster-events/draw/route.ts',{'cloudflare:workers':{env},'../../../../../lib/admin-auth':{requirePermission:async()=>true},'../../../../../lib/event-rosters':rosters,'../../../../../lib/roster-draw':drawLogic,fflate:require('fflate')});
 async function post(route,url,body){return route.POST(new Request('http://localhost'+url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}))}
 test('undangan tim, batas slot, edit tanpa penambahan, hapus dan daftar ulang',async()=>{
  await rosters.ensureRosterTables();
@@ -104,6 +104,10 @@ test('hasil grup tersimpan; peserta baru tertunda sampai admin mengundi ulang',a
  assert.equal(saved.assignments.length,3);assert.equal(saved.pending.length,1);
  saved=await (await post(drawRoute,'/api/admin/roster-events/draw',{eventId:id,groupCount:2})).json();
  assert.equal(saved.assignments.length,4);assert.equal(saved.pending.length,0);
+ const team=saved.assignments[0],target=1-team.group;
+ const moved=await post(drawRoute,'/api/admin/roster-events/draw',{eventId:id,moveId:team.id,targetGroup:target});assert.equal(moved.status,200);
+ saved=await moved.json();assert.equal(saved.assignments.find(x=>x.id===team.id).group,target);assert.equal(new Set(saved.assignments.map(x=>x.id)).size,4);
+ const workbook=await drawRoute.GET(new Request(`http://localhost/api/admin/roster-events/draw?eventId=${id}&format=xlsx`));assert.equal(workbook.status,200);const files=require('fflate').unzipSync(new Uint8Array(await workbook.arrayBuffer()));assert.match(new TextDecoder().decode(files['xl/worksheets/sheet1.xml']),/LATE TEAM/);
 });
 
 test('admin menambah team dengan logo, mengedit nama/logo, dan tetap mematuhi slot',async()=>{

@@ -79,7 +79,7 @@ test("tracking only visible active entities; config custom categories and WhatsA
 });
 test("private Showcase file respects active ad, draft admin access, range and no-store",async()=>{
  const bucket={get:async()=>({body:"image",size:5,httpMetadata:{contentType:"image/png"},etag:"a"}),head:async()=>({size:5,httpMetadata:{contentType:"image/png"},etag:"a"})};
- const image=load("../app/api/images/[...key]/route.ts",{"cloudflare:workers":{env:{BUCKET:bucket}},"../../../../lib/admin-auth":auth,"../../../../lib/showcase":store});
+ const image=load("../app/api/images/[...key]/route.ts",{"cloudflare:workers":{env:{BUCKET:bucket}},"../../../../lib/admin-auth":auth,"../../../../lib/showcase":store,"../../../../lib/esports-market":{isMarketMediaPublic:async()=>false}});
  const get=(key,headers={})=>image.GET(new Request("https://example.test/media",{headers}),{params:Promise.resolve({key:key.split("/")})});
  assert.equal((await get("showcase-media/draft.png")).status,404);
  assert.equal((await get("showcase-media/draft.png",{cookie:"admin"})).status,200);

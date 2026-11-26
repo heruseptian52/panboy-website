@@ -200,6 +200,7 @@ export default async function Home() {
               </a>
               {s.rosterPublicMenuEnabled !== "false" && <a href="/data-event" title="Data Player Event"><PanboyIcon name="event" /><span>DATA PLAYER EVENT</span></a>}
               <a href="/management" title="Management"><PanboyIcon name="management" /><span>MANAGEMENT</span></a>
+              <a href="/esports-market" title="Esports Market"><PanboyIcon name="member" /><span>ESPORTS MARKET</span></a>
               <a href="/blacklist-player" title="Blacklist Player"><PanboyIcon name="member" /><span>BLACKLIST PLAYER</span></a>
               <a href="/member" title="Member">
                 <PanboyIcon name="member" />

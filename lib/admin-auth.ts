@@ -15,7 +15,7 @@ export type Permission =
   | "liveObs"
   | "members"
   | "finance"
-  | "memberDues" | "blacklist" | "communityProfile" | "services" | "topup" | "analytics";
+  | "memberDues" | "blacklist" | "communityProfile" | "services" | "topup" | "analytics" | "market";
 export type AdminPermissions = {
   email: string;
   name: string;
@@ -36,6 +36,7 @@ export type AdminPermissions = {
   services: boolean;
   topup: boolean;
   analytics: boolean;
+  market: boolean;
   manageAdmins: boolean;
 };
 let adminSchemaReady: Promise<void> | undefined;
@@ -50,7 +51,7 @@ export async function ensureAdminsTable() {
   })().catch(error => { adminSchemaReady = undefined; throw error; });
   return adminSchemaReady;
 }
-const extraKeys = ["memberDues", "blacklist", "communityProfile", "services", "topup", "analytics"] as const;
+const extraKeys = ["memberDues", "blacklist", "communityProfile", "services", "topup", "analytics", "market"] as const;
 export function extraPermissions(value: unknown) {
   let parsed: Record<string, unknown> = {};
   try { parsed = JSON.parse(String(value || "{}")); } catch {}
@@ -149,7 +150,7 @@ export async function permissionsFor(
       members: true,
       finance: true,
       memberDues: true, blacklist: true, communityProfile: true,
-      services: true, topup: true, analytics: true,
+      services: true, topup: true, analytics: true, market: true,
       manageAdmins: true,
     };
   await ensureAdminsTable();

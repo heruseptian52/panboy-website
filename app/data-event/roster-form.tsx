@@ -33,7 +33,7 @@ useEffect(()=>{
   load().catch(error=>setMessage(error.message||"Daftar event gagal dimuat.")).finally(()=>setLoading(false));
 },[]);
 async function uploadLogo(file:File|undefined){
-  setUploadToken("");setLogoUrl("");setLogoName("");setLogoIsImage(false);setUploadError("");setUploadProgress(0);
+  setUploadError("");setUploadProgress(0);
   if(!file)return;
   if(file.size>5*1024*1024){setUploadError("File maksimal 5 MB.");return}
   if(!eventId){setUploadError("Pilih event lebih dulu.");return}
@@ -44,11 +44,7 @@ async function uploadLogo(file:File|undefined){
     const total=Math.ceil(file.size/init.chunkSize);
     for(let index=0;index<total;index++){
       const part=file.slice(index*init.chunkSize,Math.min(file.size,(index+1)*init.chunkSize));
-      await new Promise<void>((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open("POST","/api/roster-events/upload?stage=chunk");xhr.setRequestHeader("x-upload-token",init.token);xhr.setRequestHeader("x-event-id",String(eventId));xhr.setRequestHeader("x-chunk-index",String(index));
-        xhr.upload.onprogress=e=>{if(e.lengthComputable)setUploadProgress(Math.min(98,Math.round(((index+e.loaded/e.total)/total)*98)))};
-        xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve();else{let message="Bagian file gagal diupload. Coba lagi.";try{message=JSON.parse(xhr.responseText).error||message}catch{if(xhr.status===413)message="Ukuran satu bagian file ditolak. Coba lagi."}reject(new Error(message))}};
-        xhr.onerror=()=>reject(new Error("Koneksi terputus saat upload. Coba lagi."));xhr.send(part)
-      });
+      await parse(await fetch("/api/roster-events/upload?stage=chunk",{method:"POST",headers:{"x-upload-token":init.token,"x-event-id":String(eventId),"x-chunk-index":String(index)},body:part}));setUploadProgress(Math.min(98,Math.round((index+1)/total*98)));
     }
     setUploadProgress(99);
     const finish=await parse(await fetch("/api/roster-events/upload?stage=finish",{method:"POST",headers:{"x-upload-token":init.token,"x-event-id":String(eventId)} }));

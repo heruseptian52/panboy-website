@@ -34,10 +34,10 @@ function iconFor(href: string): IconName {
   return "event";
 }
 
-export type MemberAlerts = { registrations: number; payments: number };
+export type MemberAlerts = { registrations: number; payments: number; market: number; roster: number };
 
 export function useMemberAlerts() {
-  const [alerts, setAlerts] = useState<MemberAlerts>({ registrations: 0, payments: 0 });
+  const [alerts, setAlerts] = useState<MemberAlerts>({ registrations: 0, payments: 0, market: 0, roster: 0 });
   useEffect(() => {
     let mounted = true;
     async function refresh() {
@@ -46,7 +46,7 @@ export function useMemberAlerts() {
         const response = await fetch("/api/admin/member-alerts", { cache: "no-store" });
         if (response.ok && mounted) {
           const data = await response.json() as MemberAlerts;
-          if (mounted) setAlerts({ registrations: Number(data.registrations) || 0, payments: Number(data.payments) || 0 });
+          if (mounted) setAlerts({ registrations: Number(data.registrations) || 0, payments: Number(data.payments) || 0, market: Number(data.market)||0, roster: Number(data.roster)||0 });
         }
       } catch { /* Keep the last count until the next refresh. */ }
     }
@@ -70,7 +70,7 @@ function renderLinks(nodes: ReactNode, pathname: string, alerts: MemberAlerts): 
       const active = props.href === pathname || (props.href !== "/admin" && pathname.startsWith(`${props.href}/`));
       const count = props.href === "/admin/menu/member" || props.href === "/admin/member" ? alerts.registrations + alerts.payments
         : props.href === "/admin/member/pendaftaran" ? alerts.registrations
-        : props.href === "/admin/member-dues" || props.href === "/admin/member-dues/pembayaran" ? alerts.payments : 0;
+        : props.href === "/admin/member-dues" || props.href === "/admin/member-dues/pembayaran" ? alerts.payments : props.href === "/admin/esports-market" || props.href==="/admin/menu/team" ? alerts.market : props.href==="/admin/data-event" ? alerts.roster : 0;
       const detail = props.href === "/admin/member" ? `${alerts.registrations} pendaftaran, ${alerts.payments} pembayaran iuran menunggu` : `${count} menunggu tindakan`;
       return cloneElement(child as React.ReactElement<Record<string, unknown>>, {
         title: count ? `${props.title || title} · ${detail}` : props.title || title,

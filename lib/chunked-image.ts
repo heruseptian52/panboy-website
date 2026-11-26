@@ -2,14 +2,14 @@ import { env } from "cloudflare:workers";
 import { detectUploadedImage } from "./uploaded-image";
 
 export const IMAGE_CHUNK = 512 * 1024;
-type Meta = { size: number; parts: number; created: number };
+type Meta = { size: number; parts: number; created: number; result?: string };
 const bad = (error: string, status = 400) => Response.json({ error }, { status });
 const validId = (id: string) => /^[0-9a-f-]{36}$/.test(id);
 
 export async function chunkedImage(request: Request, prefix: string, maxSize: number, privateFile = false) {
   const url = new URL(request.url), action = url.searchParams.get("action");
   const id = url.searchParams.get("uploadId") || "";
-  const temp = `image-upload-temp/${prefix.replace(/[^a-z-]/g, "")}/${id}`;
+  const temp = `image-upload-temp/${prefix}/${id}`;
   if (action === "init") {
     const body = await request.json() as { size?: number };
     const size = Number(body.size);
@@ -24,6 +24,8 @@ export async function chunkedImage(request: Request, prefix: string, maxSize: nu
   if (!object) return bad("Sesi upload tidak ditemukan. Coba lagi.", 404);
   const meta = await object.json<Meta>();
   if (Date.now() - meta.created > 30 * 60_000 || meta.size > maxSize) return bad("Sesi upload kedaluwarsa. Coba lagi.", 410);
+  if (action === "complete" && meta.result) return Response.json({url:meta.result});
+  if (action === "cancel") { await env.BUCKET.delete([`${temp}/meta`,...Array.from({length:meta.parts},(_,i)=>`${temp}/part-${i}`)]); return Response.json({ok:true}); }
   if (action === "chunk") {
     const index = Number(url.searchParams.get("index"));
     if (!Number.isInteger(index) || index < 0 || index >= meta.parts) return bad("Bagian file tidak valid.");
@@ -46,8 +48,7 @@ export async function chunkedImage(request: Request, prefix: string, maxSize: nu
     if (!image) return bad("Isi file bukan gambar JPG, PNG, WebP, GIF, AVIF, atau BMP yang valid.");
     const key = `${prefix}/${crypto.randomUUID()}.${image.extension}`;
     await env.BUCKET.put(key, bytes, { httpMetadata: { contentType: image.contentType, cacheControl: privateFile ? "private, no-store" : "public, max-age=31536000, immutable" } });
-    await env.BUCKET.delete([`${temp}/meta`, ...chunks.map((_, i) => `${temp}/part-${i}`)]);
-    return Response.json({ url: `/api/images/${encodeURIComponent(key)}` });
+    const result=`/api/images/${encodeURIComponent(key)}`; await env.BUCKET.put(`${temp}/meta`,JSON.stringify({...meta,result})); await env.BUCKET.delete(chunks.map((_,i)=>`${temp}/part-${i}`)); return Response.json({url:result});
   }
   return bad("Aksi upload tidak valid.");
 }

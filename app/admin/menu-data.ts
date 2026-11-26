@@ -1,7 +1,7 @@
 import type { AdminPermissions } from "../../lib/admin-auth";
 import type { IconName } from "../panboy-icon";
 
-export type MenuItem = { href: string; label: string; description: string; icon: IconName; alert?: "registrations" | "payments" };
+export type MenuItem = { href: string; label: string; description: string; icon: IconName; alert?: "registrations" | "payments" | "market" | "roster" };
 export type MenuGroup = { id: string; label: string; description: string; icon: IconName; items: MenuItem[] };
 
 export function menuGroups(a: AdminPermissions): MenuGroup[] {
@@ -11,13 +11,14 @@ export function menuGroups(a: AdminPermissions): MenuGroup[] {
         { href: "/admin", label: "Kelola Event", description: "Buat dan ubah event yang tampil di website.", icon: "event" },
         { href: "/admin/pengajuan-event", label: "Pengajuan Event", description: "Periksa poster dan setujui atau tolak event kiriman pengunjung.", icon: "registration" },
         { href: "/admin/registrasi", label: "Registrasi", description: "Atur pendaftaran peserta event.", icon: "registration" },
-        { href: "/admin/data-event", label: "Data Player Event", description: "Form team, player, drop zone, dan ekspor.", icon: "database" },
+        { href: "/admin/data-event", label: "Data Player Event", description: "Form team, player, drop zone, dan ekspor.", icon: "database", alert:"roster" },
         { href: "/admin/turnamen", label: "Turnamen", description: "Kelola penyelenggaraan turnamen.", icon: "tournament" },
         { href: "/admin/kompetisi", label: "Scoring Event", description: "Pengaturan kompetisi dan perhitungan event.", icon: "scoring" },
       ] as MenuItem[] : []),
     ] },
     { id: "team", label: "Team & Player", description: "Database team serta laporan blacklist.", icon: "database", items: [
       ...(a.events ? [{ href: "/admin/database", label: "Database Team & Player", description: "Cari dan kelola data team serta player.", icon: "database" } as MenuItem] : []),
+      ...(a.market ? [{ href: "/admin/esports-market", label: "Esports Market", description: "Transfer Market & Team Recruitment", icon: "member", alert:"market" } as MenuItem] : []),
       ...(a.blacklist ? [{ href: "/admin/blacklist", label: "Blacklist Player", description: "Tinjau laporan dan bukti player.", icon: "member" } as MenuItem] : []),
     ] },
     { id: "member", label: "Member", description: "Pendaftaran, profil, iuran, dan pembayaran.", icon: "member", items: [
