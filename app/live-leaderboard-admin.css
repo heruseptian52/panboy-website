@@ -51,3 +51,59 @@
 }
 .live-control-title{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}.live-control-title h2{margin:0}.live-control-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.live-control-title .danger{width:auto;padding:10px 16px;border:1px solid #9b2930;background:#2a0a0d;color:#ff7b83;font-weight:900;cursor:pointer}.live-control-title .danger:disabled{opacity:.5;cursor:wait}
 .live-preview-overlay{position:relative;overflow:hidden;padding:0!important}.live-preview-overlay iframe{position:absolute;inset:0;width:1920px;height:1080px;border:0;transform-origin:top left;background:transparent;pointer-events:none}
+
+/* Operator console: independent panes and a persistent match toolbar. */
+.operator-console{display:flex;flex-direction:column;min-height:0;height:calc(100dvh - 76px);padding:12px;gap:10px;overflow:hidden}
+.operator-console button,.operator-console select,.operator-console input,.operator-view-options a{font:700 12px/1.2 Arial,sans-serif;color:#eee;background:#151411;border:1px solid #554320;border-radius:6px;padding:8px 10px;min-height:36px}
+.operator-console button,.operator-view-options a{cursor:pointer;white-space:nowrap}
+.operator-console button:disabled{opacity:.45;cursor:not-allowed}
+.operator-console button[aria-pressed=true],.operator-console .operator-next{background:#d8ab4b;color:#101010;border-color:#e6bd67}
+.operator-toolbar{display:flex;align-items:center;gap:9px 14px;flex-wrap:wrap;flex-shrink:0;padding:10px 12px;background:#11100e;border:1px solid #594623;border-radius:9px}
+.operator-board-select{display:grid;gap:4px;min-width:180px;flex:1 1 220px;max-width:340px}.operator-board-select label{font-size:11px;color:#dbb966}
+.operator-match{display:grid;gap:4px;min-width:105px}.operator-match strong{font-size:15px;color:#f5d58c}.operator-match span{font-size:11px;color:#8be4b0}
+.operator-toolbar .live-control-actions,.operator-view-options,.operator-preview-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.operator-toolbar .danger{border-color:#9b2930;background:#2a0a0d;color:#ff9b9b}
+.operator-message{font-size:12px;color:#e8c478;flex:1 0 100%;margin:0}
+.operator-workspace{display:grid;grid-template-columns:minmax(0,var(--operator-width,65%)) 10px minmax(0,1fr);flex:1;min-height:0;overflow:hidden;background:#080808;gap:0}
+.operator-workspace:fullscreen{height:100dvh;width:100vw;padding:10px;box-sizing:border-box}
+.operator-controls,.operator-preview{min-width:0;min-height:0;display:flex;flex-direction:column;background:#10100f;border:1px solid #49391c;border-radius:9px;overflow:hidden}
+.operator-list-head{padding:12px 10px 8px;display:grid;gap:8px;flex-shrink:0;background:#15130e;border-bottom:1px solid #4b3d24}
+.operator-list-head h2,.operator-preview-head h2{font-size:15px;margin:0;color:#f0d48e}
+.operator-list-head>div{display:flex;gap:6px}.operator-list-head input{flex:1;min-width:0}.operator-list-head>span{font-size:11px;color:#a99d84}
+.operator-team-list{overflow:auto;min-height:0;flex:1;scrollbar-color:#8a6c36 #151515}
+.operator-team-list article{display:grid;grid-template-columns:30px 34px minmax(60px,1fr) 54px minmax(114px,auto);align-items:center;gap:6px;padding:9px;border-bottom:1px solid #362e20;background:#121211}
+.operator-team-list article:nth-child(even){background:#171512}
+.operator-team-list article.operator-wiped{background:#211416}
+.operator-team-list article>img{width:30px;height:30px;object-fit:contain}.operator-team-list article>strong{font-size:13px;overflow-wrap:anywhere;line-height:1.25}
+.operator-team-list .operator-points{display:block;text-align:center;color:#e7c87d;white-space:nowrap}.operator-team-list .operator-points span,.operator-team-list .operator-elims span{font-size:11px;font-weight:800}
+.operator-team-list .operator-elims{grid-template-columns:1fr 34px 34px}
+.operator-team-list .operator-elims button{font-size:20px;padding:2px}
+.operator-team-list .player-statuses{grid-column:3/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.operator-team-list .quick-status{grid-column:3/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.operator-team-list .player-statuses button,.operator-team-list .quick-status button{padding:5px 2px;font-size:11px;min-height:34px;white-space:normal}
+.operator-team-list .player-statuses small{font-size:9px;display:block}
+.operator-team-list .quick-status .wipe-button{background:#311214;color:#ff9d9d;border-color:#873b3d}
+.operator-empty{padding:18px;color:#a99d84}
+.operator-divider{cursor:col-resize;touch-action:none;position:relative;display:grid;place-items:center}
+.operator-divider::before{content:"";width:4px;height:50px;background:#9b783b;border-radius:8px}
+.operator-divider:focus-visible,.operator-divider:hover{background:#302719}
+.operator-preview{padding:10px;gap:9px;overflow:auto;scrollbar-color:#8a6c36 #151515}
+.operator-preview-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:5px}
+.operator-preview-head span{font-size:11px;color:#e7b96b}.operator-preview-head .online{color:#83e5a6}.operator-preview-head .offline{color:#eeb68b}
+.operator-preview-actions span{font-size:11px;color:#a99d84}
+.operator-preview .live-preview-stage{flex-shrink:0;margin:0;display:block;box-sizing:border-box}
+.operator-zoom-panel{position:relative;flex-shrink:0;padding:6px;overflow:hidden;background:#191817;border-radius:6px}
+.operator-preview-note{font-size:12px;line-height:1.4;color:#b2a78e;margin:0}
+.operator-settings{position:static;max-height:none;overflow:visible;border:1px solid #4b3d24;border-radius:7px;padding:10px;background:#14120f;flex-shrink:0}
+.operator-settings summary{cursor:pointer;font-weight:800;font-size:12px;color:#e3b94f}
+.operator-console .mode-operator,.operator-console .mode-preview{grid-template-columns:minmax(0,1fr)}
+.mode-operator .operator-preview,.mode-preview .operator-controls,.mode-operator .operator-divider,.mode-preview .operator-divider{display:none}
+.mode-preview .operator-preview{max-width:1100px;width:100%;margin:auto;height:100%}
+@media(min-width:1550px){.operator-team-list article{grid-template-columns:28px 34px minmax(95px,1fr) 48px 125px minmax(210px,1.5fr) minmax(235px,1.6fr)}.operator-team-list .player-statuses,.operator-team-list .quick-status{grid-column:auto}}
+@media(max-width:900px){.operator-console{height:auto;min-height:calc(100dvh - 76px);overflow:visible;padding:8px}.operator-workspace{display:flex;flex-direction:column;overflow:visible;gap:10px}.operator-divider{display:none}.operator-team-list{max-height:65dvh}.operator-preview{overflow:visible}.operator-workspace.mode-operator .operator-team-list{max-height:75dvh}.operator-toolbar{position:sticky;top:68px;z-index:20}.operator-toolbar button,.operator-view-options a{font-size:11px;min-height:34px}.operator-preview .live-preview-stage{max-width:100%}}
+@media(max-width:420px){.operator-team-list article{grid-template-columns:24px 27px minmax(0,1fr) 44px 104px;padding:6px;gap:4px}.operator-team-list .operator-elims{grid-template-columns:1fr 28px 28px}.operator-team-list .player-statuses,.operator-team-list .quick-status{grid-column:1/-1}.operator-list-head>div{flex-wrap:wrap}.operator-toolbar{position:static}}
+.operator-console:fullscreen{height:100dvh;max-height:100dvh;overflow:hidden;padding:12px;background:#080808}
+.operator-controls{container-type:inline-size}
+@media(min-width:1550px){.operator-team-list article{grid-template-columns:30px 34px minmax(60px,1fr) 54px minmax(114px,auto)}.operator-team-list .player-statuses,.operator-team-list .quick-status{grid-column:3/-1}}
+@container (min-width:1050px){.operator-team-list article{grid-template-columns:28px 34px minmax(95px,1fr) 48px 125px minmax(210px,1.5fr) minmax(235px,1.6fr)}.operator-team-list .player-statuses,.operator-team-list .quick-status{grid-column:auto}}
+@container (max-width:365px){.operator-team-list article{grid-template-columns:24px 27px minmax(0,1fr) 44px 104px;padding:6px;gap:4px}.operator-team-list .operator-elims{grid-template-columns:1fr 28px 28px}.operator-team-list .player-statuses,.operator-team-list .quick-status{grid-column:1/-1}}
