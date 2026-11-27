@@ -25,6 +25,7 @@ import {getPublicShowcases} from "../lib/showcase";
 import {HomeMarket,type HomeMarketItem} from "./esports-market/home-market";
 import {settings as marketSettings,publicMarket} from "../lib/esports-market";
 import {ShowcaseSection} from "./showcase/showcase-view";
+import {readBuilder} from "../lib/website-builder";
 export const dynamic = "force-dynamic";
 function ChatIcon() {
   return (
@@ -157,6 +158,7 @@ export default async function Home() {
           backgroundPosition: "center",
         }
       : undefined;
+  const customBlocks = (await readBuilder().catch(()=>null))?.blocks.filter(b=>b.enabled) || [];
   const memberShowcase = orderHomeMembers(members,s.featuredMemberOrder,s.featuredMemberId);
   const selectedPopupEvent = events.find(e => String(e.id) === s.popupEventId);
   const popupUrl = (s.popupMediaType === "event" || s.popupLinkType === "event") ? (selectedPopupEvent ? `/event/${selectedPopupEvent.id}` : "") : /^(https?:\/\/)/i.test(s.popupLinkUrl.trim()) ? s.popupLinkUrl.trim() : "";
@@ -235,6 +237,7 @@ export default async function Home() {
                   <span>{s.navCollab}</span>
                 </a>
               )}
+              {customBlocks.map((b,i)=>b.menu&&<a key={i} href={b.slug?"/halaman/"+b.slug:b.href||"#custom-block-"+i}><PanboyIcon name="allEvents"/><span>{b.title}</span></a>)}
             </div>
           </nav>
         </header>
@@ -319,6 +322,7 @@ export default async function Home() {
           </section>
         )}
         {s.premiumAdPosition === "after_events" && premiumSection}
+        {customBlocks.map((b,i)=>!b.slug&&<section className="container" id={"custom-block-"+i} key={i} style={{padding:"24px",margin:"24px auto",border:"1px solid #765a30",borderRadius:12,background:"#181614"}}><h2 style={{fontSize:24,fontWeight:700}}>{b.title}</h2>{b.description&&<p style={{whiteSpace:"pre-wrap",margin:"12px 0"}}>{b.description}</p>}{b.href&&b.button&&<a className="button gold" href={b.href}>{b.button}</a>}</section>)}
         {!!showcase.ads.length&&<ShowcaseSection ads={showcase.ads} whatsapp={showcase.whatsapp}/>}
         {market&&<HomeMarket settings={market.settings} items={market.items}/>}
         <section className="container refresh-members" aria-labelledby="refresh-member-title"><div className="refresh-heading"><div><p className="eyebrow">MORE THAN JUST A TEAM</p><h2 id="refresh-member-title">Satu komunitas. Satu keluarga<span>.</span></h2><p>Mereka yang ikut membangun cerita Panboy Community.</p></div><a href="/member">Semua member ↗</a></div><div className="refresh-member-grid">{memberShowcase.map(m=><a href="/member" key={m.id}>{m.logoUrl?<img src={m.logoUrl} alt={m.teamName} loading="lazy" decoding="async"/>:<PanboyIcon name="member"/>}<b>{m.teamName}</b></a>)}</div><div className="refresh-member-join"><PanboyIcon name="member"/><div><p className="eyebrow">TEMPAT UNTUK TIM KAMU</p><h3>Langkah besar dimulai dari kebersamaan.</h3><p>Kenali program dan benefit member Panboy Community.</p></div><a className="button gold" href="/member">Lihat benefit member ↗</a></div></section>

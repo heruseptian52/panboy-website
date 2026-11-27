@@ -24,5 +24,5 @@ test("counts real SQLite rows across pages and preserves unavailable quota",asyn
 });
 test("storage reports measured bytes and returns continuation cursor",async()=>{
  const get=route({isOwner:true},{BUCKET:{list:async()=>({objects:[{size:12},{size:23}],truncated:true,cursor:"next"})}});
- assert.deepEqual(await (await get("part=storage")).json(),{count:2,bytes:35,next:"next"});
+ assert.deepEqual(await (await get("part=storage")).json(),{count:2,bytes:35,groups:{"File lainnya":{count:2,bytes:35}},next:"next"});
 });
