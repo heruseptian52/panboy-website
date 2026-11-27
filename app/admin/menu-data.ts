@@ -68,6 +68,7 @@ export function menuGroups(a: AdminPermissions): MenuGroup[] {
       ...(a.analytics ? [{ href: "/admin/analitik", label: "Analitik", description: "Pantau aktivitas pengunjung.", icon: "analytics" } as MenuItem] : []),
       ...(a.events ? [{ href: "/admin/sampah", label: "Sampah", description: "Lihat data event yang dihapus.", icon: "trash" } as MenuItem] : []),
       ...(a.isOwner ? [
+        { href: "/admin/system-center", label: "System Center", description: "Pantau database, penyimpanan, dan aktivitas website.", icon: "settings" },
         { href: "/admin/audit", label: "Audit Log", description: "Riwayat perubahan oleh admin.", icon: "audit" },
         { href: "/admin/akses", label: "Akses Admin", description: "Atur akun dan izin admin.", icon: "admin" },
       ] as MenuItem[] : []),
