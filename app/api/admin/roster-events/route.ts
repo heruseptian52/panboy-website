@@ -1,0 +1,87 @@
+import {env} from "cloudflare:workers";
+import {requirePermission} from "../../../../lib/admin-auth";
+import {ensureRosterTables,normalizePlayers,recoveryToken,hashRosterToken} from "../../../../lib/event-rosters";
+import {createRosterWorkbook} from "../../../../lib/roster-xlsx";
+import {driveFolderId,syncRosterLogo} from "../../../../lib/roster-drive";
+import {defaultOptions, readOptions, readZones, normalizeTeamPhone, validateOptions} from "../../../../lib/roster-options";
+import {ensureEventsTable} from "../../../../lib/events";
+import {ensureSettings} from "../../../../lib/settings";
+async function linkedEvent(value:unknown){const id=Number(value);if(!Number.isSafeInteger(id)||id<1)return null;await ensureEventsTable();return env.DB.prepare("SELECT id,title FROM events WHERE id=? AND deleted_at=''").bind(id).first<{id:number;title:string}>()}
+function slotSetting(value:unknown){const n=Number(value);return Number.isSafeInteger(n)&&n>=1&&n<=1000?n:0}
+export async function GET(request: Request){if(!await requirePermission(request,"events"))return Response.json({error:"Tidak diizinkan"},{status:403});await ensureRosterTables();const url=new URL(request.url),id=Number(url.searchParams.get("id"));if(url.searchParams.get("config")==="1"){
+  await ensureEventsTable();await ensureSettings();
+  const [siteEvents,menu]=await Promise.all([env.DB.prepare("SELECT id,title,start_date AS startDate,status FROM events WHERE deleted_at='' ORDER BY id DESC LIMIT 1000").all(),env.DB.prepare("SELECT value FROM site_settings WHERE key='rosterPublicMenuEnabled'").first<{value:string}>()]);
+  return Response.json({siteEvents:siteEvents.results,publicMenuEnabled:menu?.value!=="false"});
+}if(!id){const rows=await env.DB.prepare("SELECT e.*, (SELECT COUNT(*) FROM roster_entries r WHERE r.event_id=e.id) AS teams FROM roster_events e ORDER BY e.id DESC LIMIT 200").all();return Response.json(rows.results)}const event=await env.DB.prepare("SELECT * FROM roster_events WHERE id=?").bind(id).first();if(!event)return Response.json({error:"Event tidak ditemukan"},{status:404});const teamId=Number(url.searchParams.get("editLink"));
+if(teamId){
+  const entry=await env.DB.prepare("SELECT edit_token_hash AS hash FROM roster_entries WHERE id=? AND event_id=?").bind(teamId,id).first<{hash:string}>();
+  if(!entry)return Response.json({error:"Team tidak ditemukan"},{status:404});
+  return Response.json({path:`/data-event?event=${id}&token=${await recoveryToken(id,teamId,entry.hash)}`},{headers:{"Cache-Control":"private, no-store"}});
+}
+if(url.searchParams.get("invitations")==="1"){
+ const invites=await env.DB.prepare("SELECT id,team_name AS teamName,entry_id AS entryId,revoked,created_at AS createdAt FROM roster_invitations WHERE roster_event_id=? ORDER BY id DESC").bind(id).all();
+ return Response.json(invites.results,{headers:{"Cache-Control":"private, no-store"}});
+}
+const downloadId=Number(url.searchParams.get("downloadLogo"));if(downloadId){const logo=await env.DB.prepare("SELECT logo_key AS key,logo_name AS name FROM roster_entries WHERE event_id=? AND id=?").bind(id,downloadId).first<{key:string;name:string}>();if(!logo?.key)return Response.json({error:"Logo tidak ditemukan"},{status:404});const object=await env.BUCKET.get(logo.key);if(!object)return Response.json({error:"File logo tidak ditemukan"},{status:404});const name=(logo.name||"logo-team").replace(/[\r\n]/g," ").replace(/[\\/]/g,"_").slice(0,150);return new Response(object.body,{headers:{"Content-Type":object.httpMetadata?.contentType||"application/octet-stream","Content-Length":String(object.size),"Content-Disposition":`attachment; filename="logo-team"; filename*=UTF-8''${encodeURIComponent(name)}`,"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}})}const rows=await env.DB.prepare("SELECT id,contact_phone AS contactPhone,zones_json AS zonesJson,team_name AS teamName,players_json AS playersJson,logo_key AS logoKey,logo_name AS logoName,drive_status AS driveStatus,drive_file_id AS driveFileId,updated_at AS updatedAt FROM roster_entries WHERE event_id=? ORDER BY team_name COLLATE NOCASE").bind(id).all();const entries=rows.results.map((r:any)=>({...r,zones:JSON.parse(r.zonesJson as string),players:JSON.parse(r.playersJson as string),logoUrl:r.logoKey?`/api/images/${r.logoKey}`:""}));if(url.searchParams.get("format")==="xlsx"){const blob=createRosterWorkbook(String(event.title),Number(event.max_players||8),entries as any,readOptions(String(event.options_json)),url.origin);return new Response(await blob.arrayBuffer(),{headers:{"Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","Content-Disposition":`attachment; filename="data-player-event-${id}.xlsx"`,"Cache-Control":"private, no-store"}})}return Response.json({event,entries},{headers:{"Cache-Control":"private, no-store"}})}
+export async function DELETE(request:Request){if(!await requirePermission(request,"events"))return Response.json({error:"Tidak diizinkan"},{status:403});await ensureRosterTables();const id=Number(new URL(request.url).searchParams.get("id"));if(!Number.isSafeInteger(id)||id<1)return Response.json({error:"ID event tidak valid"},{status:400});const event=await env.DB.prepare("SELECT id FROM roster_events WHERE id=?").bind(id).first();if(!event)return Response.json({error:"Event tidak ditemukan"},{status:404});await env.DB.batch([env.DB.prepare("DELETE FROM roster_invitations WHERE roster_event_id=?").bind(id),env.DB.prepare("DELETE FROM roster_draws WHERE event_id=?").bind(id),env.DB.prepare("DELETE FROM roster_entries WHERE event_id=?").bind(id),env.DB.prepare("DELETE FROM roster_uploads WHERE event_id=?").bind(id),env.DB.prepare("DELETE FROM roster_events WHERE id=?").bind(id)]);let cleanupWarning=false;for(const prefix of [`roster-logos/${id}/`,`roster-tmp/${id}/`]){try{let cursor:string|undefined;do{const page=await env.BUCKET.list({prefix,limit:1000,cursor});if(page.objects.length)await env.BUCKET.delete(page.objects.map(item=>item.key));cursor=page.truncated?page.cursor:undefined}while(cursor)}catch(error){cleanupWarning=true;console.error("Roster event file cleanup failed",error)}}return Response.json({ok:true,warning:cleanupWarning?"Event dan data berhasil dihapus, tetapi sebagian file lama belum dapat dibersihkan.":""})}
+export async function POST(request:Request){
+ if(!await requirePermission(request,"events"))return Response.json({error:"Tidak diizinkan"},{status:403});
+ await ensureRosterTables();const b=await request.json() as any;
+ const siteEvent=await linkedEvent(b.siteEventId),deadline=String(b.deadline||""),maxPlayers=Number(b.maxPlayers),maxSlots=slotSetting(b.maxSlots),driveFolderUrl=String(b.driveFolderUrl||"").trim();
+ if(!siteEvent)return Response.json({error:"Pilih event website yang sudah diposting."},{status:400});
+ if(!maxSlots)return Response.json({error:"Batas slot harus 1 sampai 1000 team."},{status:400});
+ if(driveFolderUrl&&!driveFolderId(driveFolderUrl))return Response.json({error:"Masukkan link folder Google Drive yang benar."},{status:400});
+ if(!Number.isInteger(maxPlayers)||maxPlayers<4||maxPlayers>8||!Number.isFinite(Date.parse(deadline)))return Response.json({error:"Isi batas edit dan maksimal player yang valid."},{status:400});
+ let options;try{options=validateOptions(b.options??defaultOptions)}catch(e){return Response.json({error:(e as Error).message},{status:400})}
+ try{const x=await env.DB.prepare("INSERT INTO roster_events(options_json,title,deadline,max_players,drive_folder_url,site_event_id,max_slots,show_slots,created_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(JSON.stringify(options),siteEvent.title,new Date(deadline).toISOString(),maxPlayers,driveFolderUrl,siteEvent.id,maxSlots,b.showSlots?1:0,new Date().toISOString()).run();return Response.json({ok:true,id:x.meta.last_row_id})}
+ catch{return Response.json({error:"Event website ini sudah terhubung dengan pendataan lain."},{status:409})}
+}
+export async function PUT(request:Request){if(!await requirePermission(request,"events"))return Response.json({error:"Tidak diizinkan"},{status:403});await ensureRosterTables();const b=await request.json() as any,id=Number(b.id);
+if(b.action==="publicMenu"){
+  await ensureSettings();await env.DB.prepare("INSERT INTO site_settings(key,value,updated_at) VALUES('rosterPublicMenuEnabled',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(b.enabled?"true":"false",new Date().toISOString()).run();return Response.json({ok:true});
+}
+if(!Number.isSafeInteger(id)||id<1)return Response.json({error:"ID tidak valid"},{status:400});if(b.action==="settings"){
+ const current=await env.DB.prepare("SELECT site_event_id AS siteEventId,deadline FROM roster_events WHERE id=?").bind(id).first<{siteEventId:number|null;deadline:string}>();
+ if(!current)return Response.json({error:"Pendataan tidak ditemukan"},{status:404});
+ const siteEventId=Number(b.siteEventId||current.siteEventId),siteEvent=siteEventId?await linkedEvent(siteEventId):null;
+ if(current.siteEventId&&!siteEvent)return Response.json({error:"Event website tidak ditemukan."},{status:400});
+ const title=siteEvent?.title||String(b.title||"").trim(),deadline=String(b.deadline||""),maxPlayers=Number(b.maxPlayers),maxSlots=slotSetting(b.maxSlots),driveFolderUrl=String(b.driveFolderUrl||"").trim();
+ if(!maxSlots)return Response.json({error:"Batas slot harus 1 sampai 1000 team."},{status:400});
+ if(driveFolderUrl&&!driveFolderId(driveFolderUrl))return Response.json({error:"Masukkan link folder Google Drive yang benar."},{status:400});
+ if(!Number.isInteger(maxPlayers)||maxPlayers<4||maxPlayers>8||title.length<3||!Number.isFinite(Date.parse(deadline)))return Response.json({error:"Isi pengaturan event dan batas edit yang valid."},{status:400});
+ const teamCount=await env.DB.prepare("SELECT COUNT(*) AS total FROM roster_entries WHERE event_id=?").bind(id).first<{total:number}>();
+ if(current.siteEventId&&siteEvent&&current.siteEventId!==siteEvent.id&&Number(teamCount?.total||0)>0)return Response.json({error:"Event yang sudah memiliki data team tidak dapat dialihkan."},{status:409});
+ if(maxSlots<Number(teamCount?.total||0))return Response.json({error:"Batas slot tidak boleh lebih kecil dari jumlah team terdaftar."},{status:400});
+ let options;try{options=b.options?JSON.stringify(validateOptions(b.options)):null}catch(e){return Response.json({error:(e as Error).message},{status:400})}
+ try{const saved=await env.DB.prepare("UPDATE roster_events SET options_json=COALESCE(?,options_json),title=?,deadline=?,stopped=?,max_players=?,drive_folder_url=?,site_event_id=COALESCE(?,site_event_id),max_slots=?,show_slots=? WHERE id=? AND (SELECT COUNT(*) FROM roster_entries WHERE event_id=?)<=?").bind(options,title,new Date(deadline).toISOString(),b.stopped&&!(Date.parse(deadline)>Date.now()&&Date.parse(deadline)>Date.parse(current.deadline))?1:0,maxPlayers,driveFolderUrl,siteEvent?.id||null,maxSlots,siteEvent&&b.showSlots?1:0,id,id,maxSlots).run();if(!saved.meta.changes)return Response.json({error:"Jumlah team berubah. Muat ulang pengaturan dan cek batas slot."},{status:409})}
+ catch{return Response.json({error:"Event website ini sudah digunakan pendataan lain."},{status:409})}
+}else if(b.action==="syncLogo"){const row=await env.DB.prepare("SELECT r.id,r.team_name AS teamName,r.logo_key AS logoKey,r.logo_name AS logoName,e.drive_folder_url AS folderUrl FROM roster_entries r JOIN roster_events e ON e.id=r.event_id WHERE r.event_id=? AND r.id=?").bind(id,Number(b.entryId)).first<{id:number;teamName:string;logoKey:string;logoName:string;folderUrl:string}>();if(!row?.logoKey)return Response.json({error:"Logo team tidak ditemukan"},{status:404});const result=await syncRosterLogo(row.logoKey,row.logoName,row.folderUrl,row.teamName);await env.DB.prepare("UPDATE roster_entries SET drive_status=?,drive_file_id=? WHERE id=?").bind(result.status,result.fileId,row.id).run();if(result.status!=="synced")return Response.json({error:result.status==="not_connected"?"Google Drive belum terhubung. Logo aman tersimpan di website.":"Sinkronisasi Google Drive gagal. Coba lagi nanti."},{status:409})}else if(b.action==="entry"||b.action==="createEntry"){
+ const creating=b.action==="createEntry";
+ const setting=await env.DB.prepare("SELECT options_json AS settings,max_players AS maxPlayers,drive_folder_url AS folderUrl FROM roster_events WHERE id=?").bind(id).first<{settings:string;maxPlayers:number;folderUrl:string}>();
+ if(!setting)return Response.json({error:"Event tidak ditemukan"},{status:404});
+ const options=readOptions(setting.settings),team=String(b.teamName||"").trim().replace(/\s+/g," ");
+ if(team.length<2||team.length>80)return Response.json({error:"Nama team tidak valid"},{status:400});
+ let players=null,zones=null,contactPhone=null;
+ try{
+  if(options.phoneEnabled)contactPhone=b.contactPhone?normalizeTeamPhone(b.contactPhone):"";
+  if(options.playersEnabled)players=JSON.stringify(Array.isArray(b.players)&&b.players.length?normalizePlayers(b.players,setting.maxPlayers):[]);
+  if(options.zonesEnabled)zones=JSON.stringify(Array.isArray(b.zones)&&b.zones.some((z:unknown)=>String(z||"").trim())?readZones(b.zones):[]);
+ }catch(e){return Response.json({error:(e as Error).message},{status:400})}
+ const token=String(b.uploadToken||"");
+ const upload=token?await env.DB.prepare("SELECT object_key AS objectKey,file_name AS fileName FROM roster_uploads WHERE token=? AND event_id=? AND ready=1 AND consumed=0 AND expires_at>?").bind(token,id,new Date().toISOString()).first<{objectKey:string;fileName:string}>():null;
+ if(token&&!upload)return Response.json({error:"Sesi upload logo tidak valid. Upload ulang."},{status:400});
+ let entryId=Number(b.entryId);
+ try{
+  if(creating){
+   const invite=await env.DB.prepare("SELECT id FROM roster_invitations WHERE roster_event_id=? AND team_name=? COLLATE NOCASE AND revoked=0 AND entry_id IS NULL ORDER BY id DESC LIMIT 1").bind(id,team).first<{id:number}>();
+   const result=await env.DB.prepare("INSERT INTO roster_entries(event_id,team_name,contact_phone,players_json,zones_json,edit_token_hash,logo_key,logo_name,drive_status,updated_at,invitation_id) SELECT e.id,?,?,?,?,?,?,?,?,?,? FROM roster_events e WHERE e.id=? AND (e.max_slots<=0 OR (SELECT COUNT(*) FROM roster_entries WHERE event_id=e.id)<e.max_slots)").bind(team,contactPhone||"",players||"[]",zones||"[]",await hashRosterToken(crypto.randomUUID()+crypto.randomUUID()),upload?.objectKey||"",upload?.fileName||"","pending",new Date().toISOString(),invite?.id??null,id).run();
+   if(!result.meta.changes)return Response.json({error:"Slot event sudah penuh."},{status:409});
+   entryId=Number(result.meta.last_row_id);if(invite)await env.DB.prepare("UPDATE roster_invitations SET entry_id=? WHERE id=? AND entry_id IS NULL").bind(entryId,invite.id).run();
+  }else{
+   const result=await env.DB.prepare("UPDATE roster_entries SET team_name=?,contact_phone=COALESCE(?,contact_phone),players_json=COALESCE(?,players_json),zones_json=COALESCE(?,zones_json),logo_key=COALESCE(?,logo_key),logo_name=COALESCE(?,logo_name),drive_status=CASE WHEN ? IS NOT NULL THEN 'pending' ELSE drive_status END,drive_file_id=CASE WHEN ? IS NOT NULL THEN '' ELSE drive_file_id END,updated_at=? WHERE id=? AND event_id=?").bind(team,contactPhone,players,zones,upload?.objectKey??null,upload?.fileName??null,upload?.objectKey??null,upload?.objectKey??null,new Date().toISOString(),entryId,id).run();
+   if(!result.meta.changes)return Response.json({error:"Team tidak ditemukan"},{status:404});
+  }
+ }catch{return Response.json({error:"Nama team sudah digunakan atau data gagal disimpan."},{status:409})}
+ if(upload){await env.DB.prepare("UPDATE roster_uploads SET consumed=1 WHERE token=? AND event_id=?").bind(token,id).run();const status=await syncRosterLogo(upload.objectKey,upload.fileName,setting.folderUrl,team);await env.DB.prepare("UPDATE roster_entries SET drive_status=?,drive_file_id=? WHERE id=? AND logo_key=?").bind(status.status,status.fileId,entryId,upload.objectKey).run()}
+ return Response.json({ok:true,id:entryId});
+}else return Response.json({error:"Aksi tidak valid"},{status:400});return Response.json({ok:true})}

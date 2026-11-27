@@ -1,0 +1,1 @@
+ALTER TABLE `scoreboard_teams` ADD `logo_url` text DEFAULT '' NOT NULL;

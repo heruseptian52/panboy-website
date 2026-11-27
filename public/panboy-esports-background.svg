@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="warm"><stop stop-color="#D4AF37" stop-opacity=".48"/><stop offset=".44" stop-color="#9A6A2F" stop-opacity=".18"/><stop offset="1" stop-color="#9A6A2F" stop-opacity="0"/></radialGradient>
+    <radialGradient id="soft"><stop stop-color="#F3D58A" stop-opacity=".47"/><stop offset=".25" stop-color="#D4AF37" stop-opacity=".16"/><stop offset="1" stop-color="#D4AF37" stop-opacity="0"/></radialGradient>
+    <linearGradient id="beam"><stop stop-color="#D4AF37" stop-opacity=".17"/><stop offset="1" stop-color="#D4AF37" stop-opacity="0"/></linearGradient>
+    <pattern id="hex" width="58" height="50" patternUnits="userSpaceOnUse"><path d="M0 12 14 4l14 8v16l-14 8L0 28zm29 25 14-8 14 8v16l-14 8-14-8z" fill="none" stroke="#D4AF37" stroke-opacity=".13" stroke-width="1"/></pattern>
+    <mask id="edges"><rect width="1440" height="900" fill="white"/><ellipse cx="720" cy="445" rx="480" ry="440" fill="black"/></mask>
+  </defs>
+  <rect width="1440" height="900" fill="#080808"/>
+  <rect width="1440" height="900" fill="url(#hex)" mask="url(#edges)" opacity=".55"/>
+  <ellipse cx="0" cy="90" rx="420" ry="330" fill="url(#warm)"/><ellipse cx="1440" cy="90" rx="420" ry="330" fill="url(#warm)"/>
+  <ellipse cx="0" cy="900" rx="420" ry="340" fill="url(#warm)"/><ellipse cx="1440" cy="900" rx="420" ry="340" fill="url(#warm)"/>
+  <path d="M0 20 390 450 0 310zM1440 20 1050 450 1440 310zM0 900 380 500 0 640zM1440 900 1060 500 1440 640z" fill="url(#beam)"/>
+  <g fill="url(#soft)"><circle cx="25" cy="75" r="130"/><circle cx="1415" cy="75" r="130"/><circle cx="25" cy="830" r="140"/><circle cx="1415" cy="830" r="140"/></g>
+  <g fill="none" stroke="#F3D58A" stroke-opacity=".34" stroke-width="2"><path d="M0 89 38 49 82 88 41 131zM1440 89l-38-40-44 39 41 43zM0 811l38-40 44 39-41 43zM1440 811l-38-40-44 39 41 43z"/><path d="M0 164 86 262M1440 164l-86 98M0 740l86-98M1440 740l-86-98" stroke-opacity=".13"/></g>
+  <g fill="#F3D58A" opacity=".28"><circle cx="170" cy="100" r="1.4"/><circle cx="330" cy="205" r="1"/><circle cx="1280" cy="151" r="1.5"/><circle cx="1100" cy="261" r="1"/><circle cx="120" cy="670" r="1"/><circle cx="320" cy="790" r="1.3"/><circle cx="1240" cy="720" r="1"/><circle cx="1110" cy="830" r="1.5"/></g>
+</svg>

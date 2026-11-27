@@ -1,0 +1,1 @@
+ALTER TABLE `roster_events` ADD `max_players` integer DEFAULT 8 NOT NULL;

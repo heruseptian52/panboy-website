@@ -1,0 +1,22 @@
+.live-board-panel{position:relative;overflow:hidden;color:#f8fbff;font-family:Arial Black,Arial,sans-serif;box-shadow:0 8px 34px #0008}
+.live-board-panel header{position:absolute;inset:0 0 auto;clip-path:polygon(7% 0,100% 0,100% 100%,0 100%);font-size:.55em;letter-spacing:.4px}
+.live-board-panel header span,.live-board-row>*{position:absolute;top:50%;transform:translate(-50%,-50%);white-space:nowrap}
+.live-board-panel header span:first-child{transform:translateY(-50%)}
+.live-board-row{position:absolute;left:0;right:0;border-bottom:1px solid;transition:top .16s cubic-bezier(.2,.85,.25,1),opacity .12s,background .12s;background:linear-gradient(90deg,#0a2840e8,#061624e8)}
+.live-board-row:nth-of-type(even){background:linear-gradient(90deg,#0c304be8,#071b2ae8)}
+.live-board-row.wiped{filter:saturate(.25);background:#111b22}
+.live-board-row.wiped>*:not(.row-eliminated){opacity:.28}
+.live-rank{font-size:1em}
+.live-logo{display:grid;place-items:center}
+.live-logo img{width:100%;height:100%;object-fit:contain}
+.live-team{transform:translateY(-50%)!important;overflow:hidden;text-overflow:clip;font-size:.92em;line-height:1;letter-spacing:.2px}.live-pts,.live-elims{font-size:.92em}.live-board-panel,.live-board-panel *{-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+.alive-bars{display:flex;align-items:end;gap:3px}
+.alive-bars i{display:block;width:6px;height:25px;box-shadow:inset 0 0 0 1px #ffffff22}
+.alive-bars i:nth-child(2){height:23px}
+.alive-bars i:nth-child(3){height:27px}
+.alive-bars i:nth-child(4){height:24px}
+.live-board-panel footer{position:absolute;left:9px;right:9px;box-sizing:border-box;padding:0 6px;background:#f5f7f7;color:#18232c;display:flex;align-items:center;justify-content:center;gap:5px;font:700 7px/1 Arial,sans-serif;white-space:nowrap;overflow:visible}
+.live-board-panel footer span{display:flex;align-items:center;gap:3px;flex:0 0 auto}
+.live-board-panel footer i{width:6px;height:6px;display:inline-block;flex:0 0 auto}
+.row-eliminated{position:absolute!important;inset:0 0 0 auto;top:0!important;width:48%;transform:none!important;display:grid;place-items:center;background:linear-gradient(90deg,transparent,#1c0507e8 28%,#561015f2);color:#ff6268;font:900 .62em Arial,sans-serif;letter-spacing:1.8px;text-shadow:0 0 12px #ff273c88;animation:row-eliminated 3s ease both;z-index:3}
+@keyframes row-eliminated{0%{opacity:0;transform:translateX(18px)!important}14%,78%{opacity:1;transform:translateX(0)!important}100%{opacity:0;transform:translateX(-10px)!important}}

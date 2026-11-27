@@ -1,0 +1,9 @@
+"use client";
+import { useEffect, useState } from "react";
+type Log={id:number;adminEmail:string;action:string;entityType:string;entityId:string;details:string;createdAt:string};
+export default function AuditAdmin(){
+  const [logs,setLogs]=useState<Log[]>([]),[query,setQuery]=useState(""),[filter,setFilter]=useState("all"),[error,setError]=useState("");
+  useEffect(()=>{void fetch("/api/admin/audit",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("Gagal memuat catatan admin.");return r.json()}).then(setLogs).catch(()=>setError("Gagal memuat catatan admin. Muat ulang halaman."))},[]);
+  const shown=logs.filter(x=>(filter==="all"||x.entityType.includes(filter))&&`${x.adminEmail} ${x.action} ${x.entityType} ${x.entityId} ${x.details}`.toLowerCase().includes(query.toLowerCase()));
+  return <section className="admin-content"><div className="admin-title"><div><small>RIWAYAT ADMIN</small><h1>CATATAN PERUBAHAN</h1><p>Siapa mengubah data, kapan, dan tindakan yang dilakukan.</p></div><a href="/admin">← EVENT</a></div><div className="audit-filters"><input aria-label="Cari catatan admin" placeholder="Cari admin, tindakan, atau data..." value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="Jenis catatan" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">SEMUA</option><option value="member">MEMBER & IURAN</option><option value="finance">KEUANGAN</option><option value="event">EVENT</option></select></div>{error&&<p role="alert">{error}</p>}<div className="audit-list">{shown.map(x=><article key={x.id}><time>{new Date(x.createdAt).toLocaleString("id-ID")}</time><b>{x.action.toUpperCase()}</b><span>{x.entityType} #{x.entityId}</span><p>{x.details}</p><small>{x.adminEmail}</small></article>)}{!shown.length&&!error&&<p>Tidak ada catatan yang cocok.</p>}</div></section>
+}

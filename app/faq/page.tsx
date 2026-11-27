@@ -1,0 +1,3 @@
+export const dynamic = "force-static";
+const items=[['Bagaimana cara membayar?','Pilih layanan atau membership, isi data, lalu lanjutkan pembayaran melalui metode yang tersedia.'],['Kapan pembayaran dikonfirmasi?','Status diperbarui setelah penyedia pembayaran mengirim konfirmasi berhasil.'],['Bagaimana jika pembayaran gagal?','Jangan membayar ulang sebelum memeriksa status pesanan. Hubungi admin dengan bukti transaksi.'],['Bagaimana cara bergabung?','Klik tombol Gabung Member dan ikuti petunjuk pendaftaran.']];
+export default function FaqPage(){return <main className="legal-page"><a href="/" className="legal-back">← Kembali</a><h1>FAQ</h1>{items.map(([q,a])=><section key={q}><h2>{q}</h2><p>{a}</p></section>)}</main>}

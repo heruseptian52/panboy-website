@@ -1,0 +1,10 @@
+{
+  "project": "Panboy Community",
+  "sourceVersion": "2026.11.24",
+  "sitesVersion": 411,
+  "sitesBaseCommit": "55dded20709fe822eea27c92b35848776d7f1f02",
+  "exportedAt": "2026-11-24",
+  "branch": "codex/panboy-roster-audit",
+  "productionUrl": "https://panboycommunity.my.id",
+  "notes": "Kandidat review berbasis Sites v411. Belum diterapkan ke produksi."
+}

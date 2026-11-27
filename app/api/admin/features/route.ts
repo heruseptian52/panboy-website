@@ -1,0 +1,6 @@
+import { env } from "cloudflare:workers";
+import { requestAdmin } from "../../../../lib/admin-auth";
+import { featureDefaults, FeatureKey, getFeatureFlags } from "../../../../lib/features";
+import { audit } from "../../../../lib/audit";
+export async function GET(request:Request){const admin=await requestAdmin(request);if(!admin?.isOwner&&!admin?.appearance)return Response.json({error:"Tidak diizinkan"},{status:403});return Response.json(await getFeatureFlags())}
+export async function PUT(request:Request){const admin=await requestAdmin(request);if(!admin?.isOwner&&!admin?.appearance)return Response.json({error:"Tidak diizinkan"},{status:403});const body=await request.json()as Record<string,unknown>,now=new Date().toISOString(),statements=[];for(const key of Object.keys(featureDefaults)as FeatureKey[]){if(typeof body[key]!=="boolean")continue;statements.push(env.DB.prepare("INSERT INTO site_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(`feature.${key}`,body[key]?"true":"false",now))}if(statements.length)await env.DB.batch(statements);await audit(admin.email,"update","feature_flags","",`Memperbarui ${statements.length} pengaturan fitur`);return Response.json({ok:true,flags:await getFeatureFlags()})}

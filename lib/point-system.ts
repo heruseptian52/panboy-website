@@ -1,0 +1,22 @@
+import{env}from"cloudflare:workers";
+export const DEFAULT_PLACEMENT:Record<string,number>={"1":10,"2":6,"3":5,"4":4,"5":3,"6":2,"7":1,"8":1};
+export const DEFAULT_TIE_BREAK=["wwcd","placementPoints","eliminations","lastPlacement"];
+export type PointRule={id:number;name:string;placement:Record<string,number>;eliminationPoint:number;tieBreak:string[];specialRules:string};
+export async function ruleForEvent(eventId:number):Promise<PointRule>{
+ const row=await env.DB.prepare("SELECT ps.* FROM point_systems ps JOIN event_point_systems eps ON eps.point_system_id=ps.id WHERE eps.event_id=?").bind(eventId).first<Record<string,unknown>>();
+ if(row)return{id:Number(row.id),name:String(row.name),placement:JSON.parse(String(row.placement_json)),eliminationPoint:Number(row.elimination_point),tieBreak:JSON.parse(String(row.tie_break_json)),specialRules:String(row.special_rules||"")};
+ const def=await env.DB.prepare("SELECT * FROM point_systems WHERE is_default=1 AND archived=0 ORDER BY id LIMIT 1").first<Record<string,unknown>>();
+ if(def)return{id:Number(def.id),name:String(def.name),placement:JSON.parse(String(def.placement_json)),eliminationPoint:Number(def.elimination_point),tieBreak:JSON.parse(String(def.tie_break_json)),specialRules:String(def.special_rules||"")};
+ return{id:0,name:"PUBG Mobile Current",placement:DEFAULT_PLACEMENT,eliminationPoint:1,tieBreak:DEFAULT_TIE_BREAK,specialRules:""};
+}
+export async function ruleForScoreboard(scoreboardId:number):Promise<PointRule>{
+ const row=await env.DB.prepare("SELECT ps.* FROM scoreboards s LEFT JOIN point_systems ps ON ps.id=s.point_system_id WHERE s.id=?").bind(scoreboardId).first<Record<string,unknown>>();
+ if(row?.id)return{id:Number(row.id),name:String(row.name),placement:JSON.parse(String(row.placement_json)),eliminationPoint:Number(row.elimination_point),tieBreak:JSON.parse(String(row.tie_break_json)),specialRules:String(row.special_rules||"")};
+ const def=await env.DB.prepare("SELECT * FROM point_systems WHERE is_default=1 AND archived=0 ORDER BY id LIMIT 1").first<Record<string,unknown>>();
+ if(def)return{id:Number(def.id),name:String(def.name),placement:JSON.parse(String(def.placement_json)),eliminationPoint:Number(def.elimination_point),tieBreak:JSON.parse(String(def.tie_break_json)),specialRules:String(def.special_rules||"")};
+ return{id:0,name:"PUBG Mobile Current",placement:DEFAULT_PLACEMENT,eliminationPoint:1,tieBreak:DEFAULT_TIE_BREAK,specialRules:""};
+}
+export function score(rule:PointRule,placement:number,eliminations:number){const placementPoints=Number(rule.placement[String(placement)]||0),eliminationPoints=eliminations*rule.eliminationPoint;return{placementPoints,eliminationPoints,totalPoints:placementPoints+eliminationPoints}}
+export async function recalculateEvent(eventId:number){const rule=await ruleForEvent(eventId);const rows=await env.DB.prepare("SELECT mr.id,mr.placement,mr.eliminations FROM match_results mr JOIN tournament_matches tm ON tm.id=mr.match_id JOIN tournament_stages ts ON ts.id=tm.stage_id WHERE ts.event_id=?").bind(eventId).all<Record<string,unknown>>();for(const r of rows.results){const s=score(rule,Number(r.placement),Number(r.eliminations));await env.DB.prepare("UPDATE match_results SET placement_points=?,total_points=?,updated_at=? WHERE id=?").bind(s.placementPoints,s.totalPoints,new Date().toISOString(),Number(r.id)).run()}return rows.results.length}
+export async function recalculateScoreboard(scoreboardId:number){const rule=await ruleForScoreboard(scoreboardId),rows=await env.DB.prepare("SELECT sr.id,sr.placement,sr.eliminations FROM scoreboard_results sr JOIN scoreboard_matches sm ON sm.id=sr.match_id WHERE sm.scoreboard_id=? AND sr.calculation_mode='auto'").bind(scoreboardId).all<Record<string,unknown>>(),now=new Date().toISOString();for(const row of rows.results){const next=score(rule,Number(row.placement),Number(row.eliminations));await env.DB.prepare("UPDATE scoreboard_results SET placement_points=?,total_points=?,updated_at=? WHERE id=?").bind(next.placementPoints,next.totalPoints,now,Number(row.id)).run()}return rows.results.length}
+export async function recalculatePointSystemScoreboards(pointSystemId:number){const boards=await env.DB.prepare("SELECT id FROM scoreboards WHERE point_system_id=?").bind(pointSystemId).all<{id:number}>();let count=0;for(const board of boards.results)count+=await recalculateScoreboard(board.id);return count}

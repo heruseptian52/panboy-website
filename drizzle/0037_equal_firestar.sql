@@ -1,0 +1,1 @@
+ALTER TABLE `finance_expenses` ADD `funding_source` text DEFAULT 'MEMBER' NOT NULL;

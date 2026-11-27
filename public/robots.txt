@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /pesanan/
+
+Sitemap: https://panboycommunity.my.id/sitemap.xml
